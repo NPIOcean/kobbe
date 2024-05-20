@@ -7,8 +7,8 @@ Functions for calculating sea ice draft
 import numpy as np
 from scipy.interpolate import interp1d
 from matplotlib import pyplot as plt
-from sigpyproc.sig_calc import runningstat, daily_average, clean_nanmedian
-from sigpyproc import sig_append
+from kobbe.sig_calc import runningstat, daily_average, clean_nanmedian
+from kobbe import sig_append
 
 
 def calculate_draft(DX, corr_sound_speed_CTD = True, qual_thr = 8000,

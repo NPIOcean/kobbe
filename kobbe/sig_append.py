@@ -22,7 +22,7 @@ import numpy as np
 import xarray as xr
 from scipy.interpolate import interp1d
 import gsw
-from sigpyproc.sig_calc import mat_to_py_time
+from kobbe.sig_calc import mat_to_py_time
 from matplotlib.dates import date2num, num2date
 
 def add_to_sigdata(DX, data, time, name, attrs = None, time_mat = False, 
