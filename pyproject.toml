@@ -1,0 +1,49 @@
+[project]
+name = "kobbe"
+description = "Post-processing and basic analysis of ice and ocean data from Nortek Signature ADCPs."
+version = "0.0.1"
+readme = "README.md"
+
+authors = [
+  { name = "Øyvind Foss", email = "oyvind.foss@npolar.no" }, 
+]
+
+maintainers = [
+  { name = "Øyvind Foss, Norwegian Polar Institute, Oceanography section", email = "" },
+]
+
+requires-python = ">=3.9, <3.12"
+dependencies = [
+  "numpy>=1.23,<2.0",
+  "scipy>=1.11.3",
+  "matplotlib>=3.7.2",
+  "gsw>=3.6.18", 
+  "glob2>=0.7",
+  "pytest==8.1.1"
+]
+
+
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Scientific/Engineering :: Oceanography",
+]
+
+
+[project.optional-dependencies]
+dev = [
+  "pytest==8.1.1",
+ ]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.urls]
+Homepage = "https://github.com/oyvfoss/kobbe/"
+
+
