@@ -12,14 +12,16 @@ maintainers = [
   { name = "Øyvind Foss, Norwegian Polar Institute, Oceanography section", email = "" },
 ]
 
-requires-python = ">=3.9, <3.12"
+requires-python = ">=3.9"
 dependencies = [
   "numpy>=1.23,<2.0",
   "scipy>=1.11.3",
   "matplotlib>=3.7.2",
   "gsw>=3.6.18", 
   "glob2>=0.7",
-  "pytest==8.1.1"
+  "pytest==8.1.1",
+  "kval@git+https://github.com/NPIOcean/kval#egg=3024aca004fce14e1c4fb3584de41346060a7c40",
+  
 ]
 
 
@@ -42,6 +44,10 @@ dev = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [project.urls]
 Homepage = "https://github.com/oyvfoss/kobbe/"
