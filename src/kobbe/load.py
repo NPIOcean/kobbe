@@ -119,20 +119,25 @@ def matfiles_to_dataset(file_list, reshape = True, lat = None, lon = None,
     # Add tilt (from pitch/roll)
     DX = _add_tilt(DX)
 
+
     # Sort by time
     DX = DX.sortby('time_average')
 
+ 
     # Reshape
     if reshape:
         DX = _reshape_ensembles(DX)
+
+   # Grab the (de facto) sampling rate
+    DX.attrs['sampling_interval_sec'] = np.round(np.ma.median(
+        np.diff(DX.time_average)*86400), 3)
+
+
 
     # Add some attributes
     DX = set_lat(DX, lat)
     DX = set_lon(DX, lon)
 
-    # Grab the (de facto) sampling rate
-    DX.attrs['sampling_interval_sec'] = np.round(np.ma.median(
-        np.diff(DX.time_average)*86400), 3)
     # Add FOM threshold
     DX['FOM_threshold'] = ((), FOM_ice_threshold, {'description':
         'Figure-of merit threshold used to separate ice vs open water'})
@@ -323,22 +328,22 @@ def _reshape_ensembles(DX):
 
     # Loop through variables, reshape where necessary
     for var_ in DX.variables:
-        if DX[var_].sizes == ('time_average',):
+        if DX[var_].dims == ('time_average',):
 
             DXrsh[var_] = (('TIME', 'SAMPLE'), 
                 np.ma.reshape(DX[var_], (Nens, Nsamp_per_ens)),
                 DX[var_].attrs)
-        elif DX[var_].sizes == ('BINS', 'time_average'):
+        elif DX[var_].dims == ('BINS', 'time_average'):
             DXrsh[var_] = (('BINS', 'TIME', 'SAMPLE'), 
                     np.ma.reshape(DX[var_], (DX.sizes['BINS'], 
                         Nens, Nsamp_per_ens)),
                     DX[var_].attrs)
-        elif DX[var_].sizes == ('time_average', 'xyz'):
+        elif DX[var_].dims == ('time_average', 'xyz'):
             DXrsh[var_] = (('TIME', 'SAMPLE', 'xyz'), 
                     np.ma.reshape(DX[var_], (
                         Nens, Nsamp_per_ens, DX.sizes['xyz'])),
                     DX[var_].attrs)
-        elif DX[var_].sizes == ('time_average', 'beams'):
+        elif DX[var_].dims == ('time_average', 'beams'):
             DXrsh[var_] = (('TIME', 'SAMPLE', 'beams'), 
                     np.ma.reshape(DX[var_], (
                         Nens, Nsamp_per_ens, DX.sizes['beams'])),

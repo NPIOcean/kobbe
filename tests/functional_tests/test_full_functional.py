@@ -14,15 +14,16 @@ STATUS:
 
 '''
 
-
 import pytest
 import os
 import requests
 from scipy.io import loadmat
 import tempfile
+from kobbe import load
+import xarray as xr
 
 
-# Function: Download files using the requests libary
+# Function to download files
 def download_file(url, local_filename):
     response = requests.get(url, stream=True)
     response.raise_for_status()
@@ -30,11 +31,9 @@ def download_file(url, local_filename):
         for chunk in response.iter_content(chunk_size=8192):
             f.write(chunk)
 
-
-# Define a fixture with the two matfiles
+# Fixture to handle the mat files
 @pytest.fixture(scope="module")
 def mat_files():
-    # List of URLs to download
     urls = [
         'https://zenodo.org/record/13223574/files/S100812A002_AeN_M1_1.mat?download=1',
         'https://zenodo.org/record/13223574/files/S100812A002_AeN_M1_2.mat?download=1',
@@ -43,7 +42,6 @@ def mat_files():
 
     downloaded_files = []
 
-    # Using the tempfile functionality to assure files are cleaned afer testing
     with tempfile.TemporaryDirectory() as tmpdirname:
         for url in urls:
             local_filename = os.path.join(tmpdirname, url.split('/')[-1].split('?')[0])
@@ -53,19 +51,10 @@ def mat_files():
 
         yield downloaded_files
 
-        # Cleanup is handled by TemporaryDirectory context manager
-
-# Parameterizing (not sure this will be necessary; the files will be downloaded together)
-@pytest.mark.parametrize("file", [
-    'https://zenodo.org/record/13223574/files/file1.mat?download=1',
-    'https://zenodo.org/record/13223574/files/file2.mat?download=1',
-])
+        # Cleanup handled by TemporaryDirectory context manager
 
 
-### ACTUAL TESTS
-def test_mat_file_content(file, mat_files):
-    local_filename = next(f for f in mat_files if os.path.basename(f) in file)
-    print(f'Loading {local_filename}...')
-    mat_data = loadmat(local_filename)
-    assert mat_data is not None  # Add your specific tests and assertions here
-    print(f'Content of {local_filename}:', mat_data)
+def test_load_mat_files(mat_files):
+    # Call the function you want to test
+    ds = load.matfiles_to_dataset(mat_files, lat = 79.589, lon = 28.097)
+    assert isinstance(ds, xr.Dataset), "The variable ds is not an xarray.Dataset instance."
