@@ -132,7 +132,7 @@ def histogram(DX, varnm, hrange = None, nbins = 50,
     ax.set_xlabel(unit)
 
     attrtext = 'ATTRIBUTES\n------------------\n'
-    attrtext += 'DIMENSIONS: %s'%str(DX[varnm].dims)
+    attrtext += 'DIMENSIONS: %s'%str(DX[varnm].sizes)
     for attrnm in DX[varnm].attrs.keys():
         #if len(DX[varnm].attrs[attrnm])>60:
          #   note DX.tilt_Average.attrs['note'][:60]
@@ -161,25 +161,3 @@ def histogram(DX, varnm, hrange = None, nbins = 50,
 
     if return_figure:
         return fig
-
-
-def _uv_angle(u, v):
-    '''
-    Finds the principal angle angle in [-pi/2, pi/2] where the squares
-    of the normal distance  to u,v are maximised. Ref Emery/Thompson
-    pp 327.
-
-    Also returns the standard deviation along the semimajor and
-    semiminor axes.
-
-    '''
-    if np.nanmean(u)>1e-7 or np.nanmean(v)>1e-7:
-        print('Mean of u and/or v is nonzero. Removing mean.')
-        u = u - np.nanmean(u) ; v = v - np.nanmean(v)
-    thp = 0.5* np.arctan2(2*np.nanmean(u*v),(np.nanmean(u**2)-\
-                          np.nanmean(v**2))) #ET eq 4.3.23b
-    uvcr = (u + 1j * v) * np.exp(-1j * thp)
-    majax = np.nanstd(uvcr.real)
-    minax = np.nanstd(uvcr.imag)
-
-    return thp, majax, minax

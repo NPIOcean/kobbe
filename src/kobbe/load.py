@@ -205,10 +205,10 @@ def chop(DX, indices = None, auto_accept = False):
     else:
         keep_slice = slice(indices[0], indices[1]+1)
 
-    L0 = DX.dims['TIME']
+    L0 = DX.sizes['TIME']
     print('Chopping to index %s'%indices)
     DX = DX.isel(TIME = keep_slice)
-    L1 = DX.dims['TIME']
+    L1 = DX.sizes['TIME']
     net_str = 'Chopped %i ensembles using -> %s (total ensembles %i -> %i)'%(
             L0-L1, indices, L0, L1)
     print(net_str)
@@ -246,10 +246,10 @@ def overview(DX):
             med_pres, std_pres, DX.attrs['pressure_offset']))
 
     # Size
-    print('\nSIZE:\nTotal %i time points.'%(DX.dims['TIME']*DX.dims['SAMPLE']))
+    print('\nSIZE:\nTotal %i time points.'%(DX.sizes['TIME']*DX.sizes['SAMPLE']))
     print('Split into %i ensembles with %i sample per ensemble.'%(
-          DX.dims['TIME'], DX.dims['SAMPLE']))
-    print('Ocean velocity bins: %i.'%(DX.dims['BINS']))
+          DX.sizes['TIME'], DX.sizes['SAMPLE']))
+    print('Ocean velocity bins: %i.'%(DX.sizes['BINS']))
 
 ##############################################################################
 
@@ -323,25 +323,25 @@ def _reshape_ensembles(DX):
 
     # Loop through variables, reshape where necessary
     for var_ in DX.variables:
-        if DX[var_].dims == ('time_average',):
+        if DX[var_].sizes == ('time_average',):
 
             DXrsh[var_] = (('TIME', 'SAMPLE'), 
                 np.ma.reshape(DX[var_], (Nens, Nsamp_per_ens)),
                 DX[var_].attrs)
-        elif DX[var_].dims == ('BINS', 'time_average'):
+        elif DX[var_].sizes == ('BINS', 'time_average'):
             DXrsh[var_] = (('BINS', 'TIME', 'SAMPLE'), 
-                    np.ma.reshape(DX[var_], (DX.dims['BINS'], 
+                    np.ma.reshape(DX[var_], (DX.sizes['BINS'], 
                         Nens, Nsamp_per_ens)),
                     DX[var_].attrs)
-        elif DX[var_].dims == ('time_average', 'xyz'):
+        elif DX[var_].sizes == ('time_average', 'xyz'):
             DXrsh[var_] = (('TIME', 'SAMPLE', 'xyz'), 
                     np.ma.reshape(DX[var_], (
-                        Nens, Nsamp_per_ens, DX.dims['xyz'])),
+                        Nens, Nsamp_per_ens, DX.sizes['xyz'])),
                     DX[var_].attrs)
-        elif DX[var_].dims == ('time_average', 'beams'):
+        elif DX[var_].sizes == ('time_average', 'beams'):
             DXrsh[var_] = (('TIME', 'SAMPLE', 'beams'), 
                     np.ma.reshape(DX[var_], (
-                        Nens, Nsamp_per_ens, DX.dims['beams'])),
+                        Nens, Nsamp_per_ens, DX.sizes['beams'])),
                     DX[var_].attrs)
 
 
@@ -421,14 +421,14 @@ def _matfile_to_dataset(filename, lat = None, lon = None,
             if b[key].ndim==0:
                 dx[key] = ((), b[key])
             elif b[key].ndim==1:
-                if len(b[key]) == dx.dims['time_average']:
+                if len(b[key]) == dx.sizes['time_average']:
                     dx[key] = (('time_average'), b[key])
                 else:
                     dx[key] = (('beams'), b[key])
             elif b[key].ndim==2:
-                if b[key].shape[1] == dx.dims['xyz']:
+                if b[key].shape[1] == dx.sizes['xyz']:
                     dx[key] = (('time_average', 'xyz'), b[key])
-                elif b[key].shape[1] == dx.dims['BINS']:
+                elif b[key].shape[1] == dx.sizes['BINS']:
                     dx[key] = (('BINS', 'time_average'), 
                             b[key].T)
 
@@ -439,14 +439,14 @@ def _matfile_to_dataset(filename, lat = None, lon = None,
                     dx[key] = ((), b[key])
                     
                 elif b[key].ndim==1:
-                    if len(b[key]) == dx.dims['beams']:
+                    if len(b[key]) == dx.sizes['beams']:
                         dx[key] = (('beams'), b[key])
                     else:
                         dx[key] = (('time_raw_altimeter'), b[key])
                 elif b[key].ndim==2:
-                    if b[key].shape[1] == dx.dims['xyz']:
+                    if b[key].shape[1] == dx.sizes['xyz']:
                         dx[key] = (('time_raw_altimeter', 'xyz'), b[key])
-                    elif b[key].shape[1] == dx.dims['along_altimeter']:
+                    elif b[key].shape[1] == dx.sizes['along_altimeter']:
                         dx[key] = (('along_altimeter', 
                                     'time_raw_altimeter'), b[key].T)
 

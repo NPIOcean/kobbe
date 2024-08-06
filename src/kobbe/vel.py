@@ -161,7 +161,7 @@ def _calculate_bin_depths(DX):
             + DX.cell_size_oceanvel*(1+np.arange(DX.N_cells_oceanvel)))
 
     DX['bin_depth'] = (DX.depth.mean(dim='SAMPLE').expand_dims(
-                                dim = {'BINS':DX.dims['BINS']}) 
+                                dim = {'BINS':DX.sizes['BINS']}) 
                        - dist_from_transducer[:, np.newaxis])
     DX['bin_depth'].attrs = {
             'long_name':'Sample-average depth of velocity bins',
@@ -358,7 +358,7 @@ def clear_empty_bins(DX, thr_perc=5):
     empty_bins = np.where(
         np.isnan(DX.Uocean).mean('TIME')*100>(100-thr_perc))[0]
     # Count
-    Nbins_orig = DX.dims['BINS']
+    Nbins_orig = DX.sizes['BINS']
     Nbins_drop = len(empty_bins)
 
     # Drop from dataset
@@ -367,7 +367,7 @@ def clear_empty_bins(DX, thr_perc=5):
     DX.attrs['history'] += (
         '\nDropped %i of %i bins where'%(Nbins_drop, Nbins_orig)
         + ' less than %.1f%% of samples were'%(thr_perc)
-        + '  valid. -> Remaining bins: %i'%(DX.dims['BINS']))
+        + '  valid. -> Remaining bins: %i'%(DX.sizes['BINS']))
     return DX
 
 
@@ -420,7 +420,7 @@ def reject_sidelobe(DX):
     # NaN instances where bin depth is less than 
     #   DEP-Rmax
     DX_uv = DX_uv.where(DX.bin_depth > (DEP-Rmax).expand_dims(
-                                dim = {'BINS':DX.dims['BINS']}))
+                                dim = {'BINS':DX.sizes['BINS']}))
     
     # Feed the NaNed (uocean, vocean) fields back into DX
      
@@ -452,7 +452,7 @@ def interp_oceanvel(DX, ip_depth):
     U_IP[:] = np.nan
     V_IP[:] = np.nan
 
-    for nn in np.arange(DX.dims['TIME']):
+    for nn in np.arange(DX.sizes['TIME']):
         ip_ = interp1d(DX.bin_depth.isel(TIME=nn),
                     DX.Uocean.isel(TIME=nn),bounds_error=False,
                     fill_value=np.nan)
@@ -460,10 +460,10 @@ def interp_oceanvel(DX, ip_depth):
         
         if nn/10 == nn//10:
             print('Interpolating "Uocean" (%.1f%%)...\r'%(
-                100*nn/DX.dims['TIME']), end = '')
+                100*nn/DX.sizes['TIME']), end = '')
     print('Interpolating "Uocean": *DONE*     \r', end = '')
 
-    for nn in np.arange(DX.dims['TIME']):
+    for nn in np.arange(DX.sizes['TIME']):
         ip_ = interp1d(DX.bin_depth.isel(TIME=nn),
                     DX.Vocean.isel(TIME=nn),bounds_error=False,
                     fill_value=np.nan)
@@ -471,7 +471,7 @@ def interp_oceanvel(DX, ip_depth):
         
         if nn/10 == nn//10:
             print('Interpolating "Vocean" (%.1f%%)...\r'%(
-                100*nn/DX.dims['TIME']), end = '')
+                100*nn/DX.sizes['TIME']), end = '')
     print('Interpolating "Vocean": *DONE*     \r', end = '')
 
     V_IP_name = 'Vocean_%im'%(np.round(ip_depth))

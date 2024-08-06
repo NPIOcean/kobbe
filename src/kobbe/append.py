@@ -332,11 +332,11 @@ def _add_SIC_FOM(DX, FOMthr = None):
 
 
     # Find ensemble indices where we have ice
-    ALL_ICE_IN_SAMPLE = np.bool_(np.ones([DX.dims['TIME'], 
-                             DX.dims['SAMPLE']]))
+    ALL_ICE_IN_SAMPLE = np.bool_(np.ones([DX.sizes['TIME'], 
+                             DX.sizes['SAMPLE']]))
 
-    ALL_WATER_IN_SAMPLE = np.bool_(np.ones([DX.dims['TIME'], 
-                             DX.dims['SAMPLE']]))
+    ALL_WATER_IN_SAMPLE = np.bool_(np.ones([DX.sizes['TIME'], 
+                             DX.sizes['SAMPLE']]))
 
     for nn in np.arange(1, 5):
         FOMnm = 'AverageIce_FOMBeam%i'%nn
