@@ -24,8 +24,8 @@ import xarray as xr
 from matplotlib.dates import num2date, date2num
 import matplotlib.pyplot as plt 
 from IPython.display import display
-from kobbe.sig_calc import mat_to_py_time
-from kobbe.sig_append import _add_tilt, _add_SIC_FOM, set_lat, set_lon
+from kobbe.calc import mat_to_py_time
+from kobbe.append import _add_tilt, _add_SIC_FOM, set_lat, set_lon
 from datetime import datetime
 import warnings
 
