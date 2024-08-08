@@ -1,6 +1,7 @@
 #### Øyvind's:
 
 misc/laura/
+docs/build/
 tests/test_data/*.mat
 *.pyc
 
