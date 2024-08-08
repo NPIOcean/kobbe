@@ -1,11 +1,7 @@
 #### Øyvind's:
 
-testing/development/
-testing/development/
 misc/laura/
-
-sigyproc/__pycache__/
-
+tests/test_data/*.mat
 *.pyc
 
 
