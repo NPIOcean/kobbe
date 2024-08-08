@@ -85,7 +85,7 @@ def matfiles_to_dataset(file_list, reshape = True, lat = None, lon = None,
     if len(file_list)==0:
         raise Exception(
             'The *file_list* given to the function '
-            'sig_funcs.matfiles_to_dataset() is empty.')
+            'kobbe.funcs.matfiles_to_dataset() is empty.')
 
     for filename in file_list:
        
@@ -149,7 +149,7 @@ def matfiles_to_dataset(file_list, reshape = True, lat = None, lon = None,
     DX.attrs['history'] = ('- Loaded from .mat files on' 
         + ' %s'%datetime.now().strftime("%d %b %Y."))
 
-    print('Done. Run sig_funcs.overview() to print some additional details.')
+    print('Done. Run kobbe.funcs.overview() to print some additional details.')
 
 
     return DX
@@ -199,7 +199,7 @@ def chop(DX, indices = None, auto_accept = False):
 
         if accept=='n':
             print('Not accepted -> Not chopping anything now.')
-            print('NOTE: run sig_load.chop(DX, indices =[A, B]) to'
+            print('NOTE: run kobbe.load.chop(DX, indices =[A, B]) to'
                 ' manually set chop.')
             return DX
         elif accept=='y':
@@ -211,7 +211,7 @@ def chop(DX, indices = None, auto_accept = False):
         keep_slice = slice(indices[0], indices[1]+1)
 
     L0 = DX.sizes['TIME']
-    print('Chopping to index %s'%indices)
+    print(f'Chopping to index: {indices}')
     DX = DX.isel(TIME = keep_slice)
     L1 = DX.sizes['TIME']
     net_str = 'Chopped %i ensembles using -> %s (total ensembles %i -> %i)'%(
@@ -460,7 +460,7 @@ def _matfile_to_dataset(filename, lat = None, lon = None,
     # Units, description etc
     dx.time_average.attrs['description'] = ('Time stamp for'
      ' "average" fields. Source field: *Average_Time*. Converted'
-    ' using sig_funcs.mat_to_py_time().') 
+    ' using kobbe.funcs.mat_to_py_time().') 
     dx.BINS.attrs['description'] = ('Number of velocity bins.') 
     dx.beams.attrs['description'] = ('Beam number (not 5th).') 
     dx.xyz.attrs['description'] = ('Spatial dimension.') 

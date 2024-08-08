@@ -1,5 +1,5 @@
 '''
-SIG_DRAFT.PY
+ICEDRAFT.PY
 
 Functions for calculating sea ice draft 
 '''
@@ -8,7 +8,8 @@ import numpy as np
 from scipy.interpolate import interp1d
 from matplotlib import pyplot as plt
 from kobbe.calc import runningstat, daily_average, clean_nanmedian
-from kobbe import append
+from kobbe import append, calc
+import kobbe
 
 
 def calculate_draft(DX, corr_sound_speed_CTD = True, qual_thr = 8000,
@@ -87,7 +88,7 @@ def calculate_surface_position(DX, corr_sound_speed_CTD = True,
 
     note_str = ('From %s altimeter distances.'
                 '\n\nComputed with the function '
-                'sig_draft.calculate_surface_position().'%le_ast)
+                'kobbe.icedraft.calculate_surface_position().'%le_ast)
 
     if hasattr(DX, 'sound_speed_CTD') and corr_sound_speed_CTD:
         # Ratio between observed and nominal sound speed
@@ -225,15 +226,15 @@ def get_Beta_from_OWSD(DX,
     BETA_LE = depth_lp/(depth_lp - OWSD_LP_LE)
     BETA_AST = depth_lp/(depth_lp - OWSD_LP_AST)
 
-    DX = sig_append.add_to_sigdata(DX, BETA_LE, td, 
+    DX = kobbe.append.add_to_sigdata(DX, BETA_LE, td, 
             'BETA_open_water_corr_LE')
-    DX = sig_append.add_to_sigdata(DX, BETA_AST, td, 
+    DX = kobbe.append.add_to_sigdata(DX, BETA_AST, td, 
             'BETA_open_water_corr_AST')
 
     # Append the open water estimates as well
-    DX = sig_append.add_to_sigdata(DX, OWSD_LP_LE, td, 
+    DX = kobbe.append.add_to_sigdata(DX, OWSD_LP_LE, td, 
             'OW_surface_before_correction_LE')
-    DX = sig_append.add_to_sigdata(DX, OWSD_LP_AST, td, 
+    DX = kobbe.append.add_to_sigdata(DX, OWSD_LP_AST, td, 
             'OW_surface_before_correction_AST')
     return DX
 
@@ -241,7 +242,7 @@ def get_Beta_from_OWSD(DX,
 def compare_OW_correction(DX, show_plots = True):
     '''
     Note: Run this *after* running *get_Beta_from_OWSD* but *before*
-    running *sig_draft.calculate_draft()* again.
+    running *kobbe.icedraft.calculate_draft()* again.
     '''
 
     DX0 = DX.copy()

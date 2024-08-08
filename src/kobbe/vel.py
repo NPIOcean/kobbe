@@ -194,7 +194,7 @@ def uvoc_mask_range(DX, uv_max = 1.5, tilt_max = 5,
 
     '''
     # N_variables used for counting the effect of each step.
-    N_start = np.float(np.sum(~np.isnan(DX.uocean)).data)
+    N_start = float(np.sum(~np.isnan(DX.uocean)).data)
 
     # Create DX_uv; a copy of DX containing only uocean, vocean.
     # Then feeding these back into DX before returning.
@@ -205,23 +205,23 @@ def uvoc_mask_range(DX, uv_max = 1.5, tilt_max = 5,
 
     # Speed test
     DX_uv = DX_uv.where((DX.uocean**2 + DX.vocean**2)<uv_max**2)
-    N_speed = np.float(np.sum(~np.isnan(DX_uv.uocean)).data)
+    N_speed = float(np.sum(~np.isnan(DX_uv.uocean)).data)
 
     # Tilt test
     DX_uv = DX_uv.where(DX.tilt_Average<tilt_max)
-    N_tilt = np.float(np.sum(~np.isnan(DX_uv.uocean)).data)
+    N_tilt = float(np.sum(~np.isnan(DX_uv.uocean)).data)
     
     # Sound speed test
     DX_uv = DX_uv.where((DX.Average_Soundspeed>sspd_range[0]) 
         & (DX.Average_Soundspeed<sspd_range[1]))
-    N_sspd = np.float(np.sum(~np.isnan(DX_uv.uocean)).data)
+    N_sspd = float(np.sum(~np.isnan(DX_uv.uocean)).data)
 
     # Correlation test
     DX_uv = DX_uv.where((DX.Average_CorBeam1>cor_min) 
                 | (DX.Average_CorBeam2>cor_min)
                 | (DX.Average_CorBeam3>cor_min)
                 | (DX.Average_CorBeam4>cor_min))
-    N_cor = np.float(np.sum(~np.isnan(DX_uv.uocean)).data)
+    N_cor = float(np.sum(~np.isnan(DX_uv.uocean)).data)
 
     # Amplitude test
     # Lower bound
@@ -235,7 +235,7 @@ def uvoc_mask_range(DX, uv_max = 1.5, tilt_max = 5,
                 | (DX.Average_AmpBeam3<amp_range[1])
                 | (DX.Average_AmpBeam4<amp_range[1]))
 
-    N_amp = np.float(np.sum(~np.isnan(DX_uv.uocean)).data)
+    N_amp = float(np.sum(~np.isnan(DX_uv.uocean)).data)
 
     # Amplitude bump test
 
@@ -251,10 +251,10 @@ def uvoc_mask_range(DX, uv_max = 1.5, tilt_max = 5,
     NOT_ABOVE_BUMP = xr.concat([zeros_firstbin, is_bump.cumsum(axis = 0)>0], 
                         dim = ('BINS'))<1
     DX_uv = DX_uv.where(NOT_ABOVE_BUMP)
-    N_amp_bump = np.float(np.sum(~np.isnan(DX_uv.uocean)).data)
+    N_amp_bump = float(np.sum(~np.isnan(DX_uv.uocean)).data)
 
 
-    proc_string = ('\nTHRESHOLD_BASED DATA CLEANING : '
+    proc_string = ('\nTHRESHOLD-BASED DATA CLEANING : '
      + '\nStart: %i initial valid samples.\n'%N_start
      + 'Dropping (NaNing samples where):\n'
      + '- # Speed < %.2f ms-1 # -> Dropped %i pts (%.2f%%)\n'%(
@@ -442,55 +442,88 @@ def reject_sidelobe(DX):
     return DX
 
 
-def interp_oceanvel(DX, ip_depth):
-    '''
-    Interpolate Uocean, Vocean onto a fixed depth *ip_depth*
-    '''
+import numpy as np
+from scipy.interpolate import interp1d
 
-    U_IP = DX.Uocean.mean('BINS', keep_attrs = True).copy()
-    V_IP = DX.Vocean.mean('BINS', keep_attrs = True).copy()
+def interp_oceanvel(DX, target_depth):
+
+    """
+    Interpolate ocean velocity components (Uocean, Vocean) onto a fixed depth 
+    (target_depth).
+
+    Adds new fields to the dataset, e.g.:
+    
+        Uocean_10m(TIME)
+        Vocean_10m(TIME)
+
+    If target_depth is not a whole number, the new variable name will still 
+    be rounded to the nearest integer; e.g., interp_oceanvel(DX, 10.9)
+    will produce variables called "Uocean_11m" and "Vocean_11m".
+
+    Parameters:
+    -----------
+    DX : xarray.Dataset
+        Input dataset containing the ocean velocity components (Uocean, 
+        Vocean) and the associated depths (bin_depth) over time.
+    target_depth : float
+        The target depth (in meters) to which the velocities should be 
+        interpolated.
+
+    Returns:
+    --------
+    xarray.Dataset
+        The original dataset with added interpolated velocity components 
+        (Uocean and Vocean) at the specified depth (ip_depth). The new 
+        variables are named 'Uocean_<depth>m' and 'Vocean_<depth>m'.
+    """
+    # Initialize the interpolated velocity arrays
+    U_IP = DX.Uocean.mean('BINS', keep_attrs=True).copy()
+    V_IP = DX.Vocean.mean('BINS', keep_attrs=True).copy()
     U_IP[:] = np.nan
     V_IP[:] = np.nan
 
-    for nn in np.arange(DX.sizes['TIME']):
-        ip_ = interp1d(DX.bin_depth.isel(TIME=nn),
-                    DX.Uocean.isel(TIME=nn),bounds_error=False,
-                    fill_value=np.nan)
-        U_IP[nn] = ip_(ip_depth)
-        
-        if nn/10 == nn//10:
-            print('Interpolating "Uocean" (%.1f%%)...\r'%(
-                100*nn/DX.sizes['TIME']), end = '')
-    print('Interpolating "Uocean": *DONE*     \r', end = '')
+    # Interpolate Uocean onto the fixed depth
+    for nn in range(DX.sizes['TIME']):
+        ip_ = interp1d(DX.bin_depth.isel(TIME=nn), DX.Uocean.isel(TIME=nn),
+                       bounds_error=False, fill_value=np.nan)
+        U_IP[nn] = ip_(target_depth)
 
-    for nn in np.arange(DX.sizes['TIME']):
-        ip_ = interp1d(DX.bin_depth.isel(TIME=nn),
-                    DX.Vocean.isel(TIME=nn),bounds_error=False,
-                    fill_value=np.nan)
-        V_IP[nn] = ip_(ip_depth)
-        
-        if nn/10 == nn//10:
-            print('Interpolating "Vocean" (%.1f%%)...\r'%(
-                100*nn/DX.sizes['TIME']), end = '')
-    print('Interpolating "Vocean": *DONE*     \r', end = '')
+        if nn % 10 == 0:
+            print('Interpolating "Uocean" (%.1f%%)...\r' % (
+                100 * nn / DX.sizes['TIME']), end='')
+    print('Interpolating "Uocean": *DONE*     \r', end='')
 
-    V_IP_name = 'Vocean_%im'%(np.round(ip_depth))
-    DX[V_IP_name] = V_IP
-    DX[V_IP_name].attrs['long_name'] = (DX.Vocean.attrs['long_name'] 
-                            + ' interpolated to %.1f m depth'%ip_depth)
-    DX[V_IP_name].attrs['processing_history'] = (
-        DX.Vocean.attrs['processing_history'] 
-        + '\nInterpolated to %.1f m depth.'%ip_depth)
+    # Interpolate Vocean onto the fixed depth
+    for nn in range(DX.sizes['TIME']):
+        ip_ = interp1d(DX.bin_depth.isel(TIME=nn), DX.Vocean.isel(TIME=nn),
+                       bounds_error=False, fill_value=np.nan)
+        V_IP[nn] = ip_(target_depth)
 
-    U_IP_name = 'Uocean_%im'%(np.round(ip_depth))
+        if nn % 10 == 0:
+            print('Interpolating "Vocean" (%.1f%%)...\r' % (
+                100 * nn / DX.sizes['TIME']), end='')
+    print('Interpolating "Vocean": *DONE*     \r', end='')
+
+    # Create variable names based on the target depth
+    U_IP_name = f'Uocean_{int(np.round(target_depth))}m'
+    V_IP_name = f'Vocean_{int(np.round(target_depth))}m'
+
+    # Add interpolated velocities to the dataset with appropriate attributes
     DX[U_IP_name] = U_IP
-    DX[U_IP_name].attrs['long_name'] = (DX.Uocean.attrs['long_name'] 
-                            + ' interpolated to %.1f m depth'%ip_depth)
+    DX[U_IP_name].attrs['long_name'] = (f"{DX.Uocean.attrs['long_name']} "
+                            f"interpolated to {target_depth:.1f} m depth")
     DX[U_IP_name].attrs['processing_history'] = (
-        DX.Uocean.attrs['processing_history'] 
-        + '\nInterpolated to %.1f m depth.'%ip_depth)
+        f"{DX.Uocean.attrs['processing_history']} "
+        f"\nInterpolated to {target_depth:.1f} m depth."
+    )
 
-    print('Added interpolated velocities: (%s, %s)'%(U_IP_name, V_IP_name))
+    DX[V_IP_name] = V_IP
+    DX[V_IP_name].attrs['long_name'] = (f"{DX.Vocean.attrs['long_name']} "
+                            f"interpolated to {target_depth:.1f} m depth")
+    DX[V_IP_name].attrs['processing_history'] = (
+        f"{DX.Vocean.attrs['processing_history']} "
+        f"\nInterpolated to {target_depth:.1f} m depth."
+    )
+
+    print(f'Added interpolated velocities: ({U_IP_name}, {V_IP_name})')
     return DX
-
-    

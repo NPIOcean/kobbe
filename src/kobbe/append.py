@@ -161,7 +161,7 @@ def append_atm_pres(DX, slp, slptime, attrs = None,
 
     # Modify the attribute dictionary (specified "units" and "long_name"
     # overrides default ones).
-    attrs_all = {'long_name':'Sea level pressure', 'units':'db'} 
+    attrs_all = {'long_name':'Sea level pressure', 'units':'dbar'} 
     if attrs:
         for nm in attrs:
             attrs_all[nm] = attrs[nm]
@@ -262,7 +262,7 @@ def _add_tilt(DX):
     tilt_attrs = {
         'units':'degrees', 
         'desc': ('Tilt calculated from pitch+roll'),
-        'note':('Calculated using the function sig_funcs._add_tilt(). '
+        'note':('Calculated using the function kobbe.funcs._add_tilt(). '
             'See Mantovanelli et al 2014 and Woodgate et al 2011.'),}
 
     try:
@@ -399,7 +399,7 @@ if False:
         '''
         Read ERA-5 variables in the nearest model grid cell:
 
-        - Sea level pressure [db] (Used for depth correction)
+        - Sea level pressure [dbar] (Used for depth correction)
         - 2-m air temperature [deg C] (Optional - toggle with *temp_2m=True*)
         - 10-m wind components [m s-1] (Optional - toggle with *wind_10m=True*)
 
