@@ -1,4 +1,4 @@
-name: Run Tests for Kobbe (Ubuntu) (py3.11 only)
+name: Run Tests for Kobbe (macOS)
 
 
 on:
