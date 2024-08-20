@@ -24,7 +24,6 @@ def calculate_draft(DX, corr_sound_speed_CTD = True, qual_thr = 8000,
     offset.
     '''
 
-
     ##X = calculate_surface_position(DX, qual_thr = qual_thr,
      #   corr_sound_speed_CTD = corr_sound_speed_CTD, le_ast ='LE')
 
