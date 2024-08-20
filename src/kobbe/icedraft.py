@@ -12,7 +12,8 @@ from kobbe import append
 
 
 def calculate_draft(
-    ds, corr_sound_speed_CTD=True, qual_thr=8000, LE_correction="LE", LE_AST_max_sep=0.5
+    ds, corr_sound_speed_CTD=True, qual_thr=8000,
+    LE_AST_max_sep=0.5
 ):
     """
     Calculate ice draft.
@@ -25,22 +26,19 @@ def calculate_draft(
 
     # Get surface position (LE and AST)
     for le_ast in ["LE", "AST"]:
-        if le_ast == "LE":
-            correction_le_ast = LE_correction
-        else:
-            correction_le_ast = "AST"
 
         ds = calculate_surface_position(
             ds,
             le_ast=le_ast,
             corr_sound_speed_CTD=corr_sound_speed_CTD,
-            LE_correction=correction_le_ast,
             qual_thr=qual_thr,
         )
 
     # Reject LE measurements where LE diverges from AST by >LE_AST_max_sep
     if LE_AST_max_sep:
-        condition = np.abs(ds.SURFACE_DEPTH_LE - ds.SURFACE_DEPTH_AST) < LE_AST_max_sep
+        condition = (
+            np.abs(ds.SURFACE_DEPTH_LE - ds.SURFACE_DEPTH_AST)
+            < LE_AST_max_sep)
 
         _N_LE_before = (~np.isnan(ds["SURFACE_DEPTH_LE"])).sum().item()
         ds["SURFACE_DEPTH_LE"] = ds["SURFACE_DEPTH_LE"].where(condition)
@@ -150,8 +148,8 @@ def calculate_surface_position(
     beta_key = "beta_%s" % le_ast
 
     # Set alpha (set to zero if we don't have one)
-    if hasattr(ds, alpha_key):
-        alpha = ds.alpha
+    if alpha_key in ds:
+        alpha = ds[alpha_key].item()
         note_str += (
             "\n- Applying an open water correction fixed offset alpha to "
             "the altimeter distance."
@@ -161,13 +159,18 @@ def calculate_surface_position(
         note_str += (
             "\n- (No fixed offset alpha applied to the altimeter distance)."
         )
+
     # Wrap out beta_ to the full 2D shape so we can apply it below
-    if hasattr(ds, beta_key):
+    if beta_key in ds:
         beta = ds[beta_key].data[:, np.newaxis] * np.ones(ds.depth.shape)
         note_str += (
             "\n- Applying an open water correction factor beta to "
             f"altimeter distance ({beta_key} field)."
         )
+        beta_mean = np.round(np.nanmean(beta).item(), 4)
+        beta_max = np.round(np.nanmax(beta).item(), 4)
+        beta_min = np.round(np.nanmin(beta).item(), 4)
+
     # ..or set it to 1 if we don't have a beta
     else:
         beta = 1
@@ -175,10 +178,11 @@ def calculate_surface_position(
             "\n- (No open water corrective factor beta applied to the "
             "altimeter distance.)"
         )
+        beta_mean, beta_max, beta_min = 'N/A', 'N/A', 'N/A'
     # Calculate the surface position (depth of the scattering surface detected
     # by LE or AST algorithm below the water surface)
     surface_position = ds.depth - (
-        (ds[alt_dist_attr] - alpha)
+        (ds[alt_dist_attr] + alpha)
         * tilt_factor
         * sound_speed_ratio_obs_nom
         * beta
@@ -191,6 +195,8 @@ def calculate_surface_position(
         "\n- Samples where %s>%i" % (alt_qual_attr, qual_thr) + " were discarded."
     )
 
+    print(beta_mean, 'beta_mean')
+
     # STORE AS VARIABLE
     ds["SURFACE_DEPTH_%s" % le_ast] = (
         ("TIME", "SAMPLE"),
@@ -202,29 +208,34 @@ def calculate_surface_position(
             ),
             "units": "m",
             "note": note_str,
-            'fixed_offset_alpha': alpha,
-            'varying_ss_factor_beta_mean': beta.mean().item(),
-            'tilt_correction_mean': tilt_factor.mean().item(),
-            'sound_speed_ratio_mean':sound_speed_ratio_obs_nom.mean().item(),
+
+            'tilt_correction_mean': np.round(tilt_factor.mean().item(), 4),
+            'sound_speed_ratio_mean': np.round(
+                sound_speed_ratio_obs_nom.mean().item(), 4),
+            'fixed_offset_alpha_cm': np.round(alpha*1e2, 4),
+            'varying_ss_factor_beta_mean': beta_mean,
+            'varying_ss_factor_beta_max': beta_max,
+            'varying_ss_factor_beta_min': beta_min,
         },
     )
 
     return ds
 
 
-def get_OWSD(ds, method="LE"):
+def get_open_water_surface_depth(ds, method="LE"):
     """
     Get the surface depth during open water periods only.
 
     Returns DataArray containing the same variable as the input -
     but with ice entries masked.
     """
-    OWSD = ds["SURFACE_DEPTH_%s" % method].where(ds.ICE_IN_SAMPLE_ANY is False)
-    return OWSD
+    open_water_surface_depth = (
+        ds["SURFACE_DEPTH_%s" % method].where(ds.ICE_IN_SAMPLE_ANY==False))
+    return open_water_surface_depth
 
 
-def get_LP_OWSD(
-    OWSD,
+def get_open_water_surface_depth_LP(
+    open_water_surface_depth,
     thr_reject_from_net_median=0.15,
     min_frac_daily=0.025,
     run_window_days=3,
@@ -247,24 +258,30 @@ def get_LP_OWSD(
     5. Smoothe this daily time series with a running mean of window length
        *run_window_days* (default=3).
     """
+
     # 1. Compute initial median and reject values away from the median
     #    by *thr_reject_from_netmedian* [m]
-    OWSD_full_median = OWSD.median()
-    OWSD_filt = OWSD.where(np.abs(OWSD - OWSD_full_median) < thr_reject_from_net_median)
+    OWSD_full_median = clean_nanmedian(open_water_surface_depth)
+
+    OWSD_filt = open_water_surface_depth.where(
+        np.abs(open_water_surface_depth - OWSD_full_median)
+        < thr_reject_from_net_median)
 
     # 2. Compute ensemble medians
     OWSD_med = OWSD_filt.median(dim="SAMPLE")
 
-    # fig, ax = plt.subplots(2, 1, sharex = True)
-    # ax[0].plot(OWSD.TIME, OWSD_med)
-
     # 3. Compute daily medians ()
     Ad, td = daily_average(
-        OWSD_med, OWSD.TIME, min_frac=min_frac_daily, axis=-1, function="median"
+        OWSD_med,
+        open_water_surface_depth.TIME,
+        min_frac=min_frac_daily,
+        axis=-1,
+        function="median"
     )
 
     # 4. Interpolate to continuous function (daily)
-    Ad_interp = interp1d(td.data[~np.isnan(Ad)], Ad[~np.isnan(Ad)], bounds_error=False)(
+    Ad_interp = interp1d(td.data[~np.isnan(Ad)], Ad[~np.isnan(Ad)],
+                         bounds_error=False)(
         td.data
     )
 
@@ -274,57 +291,6 @@ def get_LP_OWSD(
     # Export filtered, ensemble median, daily averaged, smoothed daily OWSD.
     # Also daily time array (td+0.5) of teh midpoint of the daily estimates.
     return RS["mean"], td + 0.5
-
-
-def get_Beta_from_OWSD(
-    ds,
-    thr_reject_from_net_median=0.15,
-    min_frac_daily=0.025,
-    run_window_days=3,
-):
-    """
-    Estimate sound speed correction BETA.
-    """
-
-    # Obtain (all) estimates of daily, smoothed OWSDs
-    OWSD_full_LE = get_OWSD(ds, method="LE")
-    OWSD_full_AST = get_OWSD(ds, method="AST")
-
-    # Obtain estimates of daily, smoothed OWSDs
-    OWSD_LP_LE, _ = get_LP_OWSD(
-        OWSD_full_LE,
-        thr_reject_from_net_median=thr_reject_from_net_median,
-        min_frac_daily=min_frac_daily,
-    )
-    OWSD_LP_AST, td = get_LP_OWSD(
-        OWSD_full_AST,
-        thr_reject_from_net_median=thr_reject_from_net_median,
-        min_frac_daily=min_frac_daily,
-    )
-
-    # Obtain daily, smoothed instrument depths
-    depth_med = ds.depth.median(dim="SAMPLE")
-    depth_med_daily, _ = daily_average(
-        depth_med, ds.TIME, td=td - 0.5, axis=-1, function="median"
-    )
-    RS_depth = runningstat(depth_med_daily, run_window_days)
-    depth_lp = RS_depth["mean"]
-
-    # Obtain Beta (sound speed correction factors)
-    BETA_LE = depth_lp / (depth_lp - OWSD_LP_LE)
-    BETA_AST = depth_lp / (depth_lp - OWSD_LP_AST)
-
-    ds = append.add_to_sigdata(ds, BETA_LE, td, "BETA_open_water_corr_LE")
-    ds = append.add_to_sigdata(ds, BETA_AST, td, "BETA_open_water_corr_AST")
-
-    # Append the open water estimates as well
-    ds = append.add_to_sigdata(
-        ds, OWSD_LP_LE, td, "OW_surface_before_correction_LE"
-    )
-    ds = append.add_to_sigdata(
-        ds, OWSD_LP_AST, td, "OW_surface_before_correction_AST"
-    )
-    return ds
 
 
 def get_open_water_correction(
@@ -338,16 +304,16 @@ def get_open_water_correction(
     """ """
 
     # Obtain (all) estimates Open Water Surface Depths
-    ow_surface_depth_full_LE = get_OWSD(ds, method="LE")
-    ow_surface_depth_full_AST = get_OWSD(ds, method="AST")
+    ow_surface_depth_full_LE = get_open_water_surface_depth(ds, method="LE")
+    ow_surface_depth_full_AST = get_open_water_surface_depth(ds, method="AST")
 
     # Obtain estimates of daily, smoothed Open Water Surface Depths
-    ow_surface_depth_LP_LE, _ = get_LP_OWSD(
+    ow_surface_depth_LP_LE, _ = get_open_water_surface_depth_LP(
         ow_surface_depth_full_LE,
         thr_reject_from_net_median=thr_reject_from_net_median,
         min_frac_daily=min_frac_daily,
     )
-    ow_surface_depth_LP_AST, td = get_LP_OWSD(
+    ow_surface_depth_LP_AST, td = get_open_water_surface_depth_LP(
         ow_surface_depth_full_AST,
         thr_reject_from_net_median=thr_reject_from_net_median,
         min_frac_daily=min_frac_daily,
@@ -363,8 +329,8 @@ def get_open_water_correction(
 
     # Obtain ALPHA (fixed offset)
     if fixed_offset:
-        alpha_LE = clean_nanmedian(ow_surface_depth_LP_LE)
-        alpha_AST = clean_nanmedian(ow_surface_depth_LP_AST)
+        alpha_LE = np.round(clean_nanmedian(ow_surface_depth_LP_LE), 4)
+        alpha_AST = np.round(clean_nanmedian(ow_surface_depth_LP_AST), 4)
     else:
         alpha_LE, alpha_AST = 0, 0
 
@@ -378,18 +344,25 @@ def get_open_water_correction(
     # Append alpha and beta to the dataset
 
     ds["alpha_LE"] = ((), alpha_LE)
-    ds["alpha_AST"] = ((), alpha_LE)
+    ds["alpha_AST"] = ((), alpha_AST)
 
     ds = append.add_to_sigdata(ds, beta_LE, td, "beta_LE")
     ds = append.add_to_sigdata(ds, beta_AST, td, "beta_AST")
 
     # Append the open water estimates as well
     ds = append.add_to_sigdata(
-        ds, ow_surface_depth_LP_LE, td, "OW_surface_before_correction_LE"
+        ds, ow_surface_depth_LP_LE, td, "ow_surface_before_correction_LE_LP"
     )
+    ds["ow_surface_before_correction_LE"] = (
+        ow_surface_depth_full_LE.median(dim="SAMPLE"))
+
     ds = append.add_to_sigdata(
-        ds, ow_surface_depth_LP_AST, td, "OW_surface_before_correction_AST"
+        ds, ow_surface_depth_LP_AST, td, "ow_surface_before_correction_AST_LP"
     )
+    ds["ow_surface_before_correction_AST"] = (
+        ow_surface_depth_full_AST.median(dim="SAMPLE"))
+
+    return ds
 
 
 def compare_OW_correction(ds, show_plots=True):
@@ -405,29 +378,29 @@ def compare_OW_correction(ds, show_plots=True):
     print(
         "LE: Mean (median) offset: %.1f cm (%.1f cm)"
         % (
-            ds.OW_surface_before_correction_LE.mean() * 1e2,
-            clean_nanmedian(ds.OW_surface_before_correction_LE) * 1e2,
+            ds.ow_surface_before_correction_LE.mean() * 1e2,
+            clean_nanmedian(ds.ow_surface_before_correction_LE) * 1e2,
         )
     )
 
     print(
         "AST: Mean (median) offset: %.1f cm (%.1f cm)"
         % (
-            ds.OW_surface_before_correction_AST.mean() * 1e2,
-            clean_nanmedian(ds.OW_surface_before_correction_AST) * 1e2,
+            ds.ow_surface_before_correction_AST.mean() * 1e2,
+            clean_nanmedian(ds.ow_surface_before_correction_AST) * 1e2,
         )
     )
 
     print(f"LE: Applied offset alpha: {ds.alpha_LE*1e2:.1f} cm")
     print(
         "LE: Applied time-varying sound speed factor beta: Mean (median)"
-        f": {ds.beta_LE.mean():.4f} ({clean_nanmedian(ds.beta_LE):.4f}"
+        f": {ds.beta_LE.mean():.5f} ({clean_nanmedian(ds.beta_LE):.5f})"
     )
 
     print(f"AST: Applied offset alpha: {ds.alpha_AST*1e2:.1f} cm")
     print(
         "AST: Applied time-varying sound speed factor beta: Mean (median)"
-        f": {ds.beta_AST.mean():.4f} ({clean_nanmedian(ds.beta_AST):.4f}"
+        f": {ds.beta_AST.mean():.5f} ({clean_nanmedian(ds.beta_AST):.5f})"
     )
 
     print(
@@ -444,22 +417,40 @@ def compare_OW_correction(ds, show_plots=True):
 
     # Figures
     if show_plots:
-        fig, ax = plt.subplots(2, 1, sharex=True)
 
-        ax[0].plot_date(ds2.TIME, ds.OW_surface_before_correction_LE, "-", label="LE")
-        ax[0].plot_date(ds2.TIME, ds.OW_surface_before_correction_AST, "-", label="AST")
+        #
 
-        ax[1].plot_date(ds2.TIME, ds.BETA_open_water_corr_LE, "-", label="LE")
-        ax[1].plot_date(ds2.TIME, ds.BETA_open_water_corr_AST, "-", label="AST")
+        fig, ax = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
+
+        ax[0].plot_date(ds2.TIME,
+                        ds.ow_surface_before_correction_LE,
+                        "-", label="LE", color='tab:blue')
+        ax[0].plot_date(ds2.TIME,
+                        ds.ow_surface_before_correction_LE-ds.alpha_LE,
+                        "--", label="LE (after fixed offset)",
+                        color='tab:blue')
+        ax[0].plot_date(ds2.TIME,
+                        ds.ow_surface_before_correction_AST,
+                        "-", label="AST", color='tab:orange')
+        ax[0].plot_date(ds2.TIME,
+                        ds.ow_surface_before_correction_AST-ds.alpha_AST,
+                        "--", label="AST (after fixed, offset)",
+                        color='tab:orange')
+        ax[1].plot_date(ds2.TIME, ds.beta_LE, "-", label="LE")
+        ax[1].plot_date(ds2.TIME, ds.beta_AST, "-", label="AST")
 
         for axn in ax:
             axn.legend()
             axn.grid()
         labfs = 9
-        ax[0].set_ylabel("Estimated open water\nsurface depth [m]", fontsize=labfs)
-        ax[1].set_ylabel("BETA (OWSD correction factor)", fontsize=labfs)
+        ax[0].set_ylabel("Estimated open water\nsurface depth [m]",
+                         fontsize=labfs)
+        ax[1].set_ylabel("beta (open water altimeter distance"
+                         " correction factor)", fontsize=labfs)
 
-        fig, ax = plt.subplots(1, 2, sharex=True, sharey=True)
+        #
+
+        fig, ax = plt.subplots(1, 2, figsize=(12, 6), sharex=True, sharey=True)
         ax[0].scatter(
             ds0.time_average,
             ds0.SURFACE_DEPTH_LE,
