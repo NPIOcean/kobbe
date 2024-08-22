@@ -1,4 +1,4 @@
-# Processing pipeline
+# Processing algorithm for Signature data
 
 The following describes a typical `kobbe` processing pipeline for ice and ocean data collected using a moored 5-beam Nortek *Signature250* or *Signature500* instruments.
 
@@ -214,7 +214,7 @@ We want to find one or both coefficients $\alpha_{OW}, \beta_{OW}$ to correct th
 3. The fixed offset correction $\alpha_{OW}$ is taken as the mean of $\eta_{LP}$.
 4. The time-varying factor correction $\beta_{OW}$ is calculated so that the low-pass filtered open water surface (after applying $\alpha_{OW}$) is zero:
 
-> $\beta_{OW} = (D_{LP} - \alpha_{OW}) / (D_{LP} - \eta_{LP})$
+> $\beta_{OW}(t) = (D_{LP}(t) - \alpha_{OW}) / (D_{LP}(t) - \eta_{LP}(t))$
 
 ..which is equivalent to the following holding over the LP time scale:
 

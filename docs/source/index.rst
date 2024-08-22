@@ -1,30 +1,16 @@
-``kobbe`` documentation
-========================
+``kobbe``
+---------
 
-Preliminary doc page for ``kobbe``.
+*Post-processing of ice and ocean data from Nortek Signature ADCPs*
 
-Structure
---------------
+Preliminary documentation page.
 
-.. toctree::
-   :maxdepth: 1
-
-   pipeline/pipeline
-   code_breakdown/code_breakdown
-
-____________________--
-
-
-Currently just working on getting the autodoc from source code to run (getting there, see below).
-
-
-
-
-Testing autodoc for the ``calc`` module
----------------------------------------
-.. automodule:: kobbe.calc
-   :members:
+____
 
 .. toctree::
-   :maxdepth: 1
-   :caption: Contents:
+    :maxdepth: 1
+
+    pipeline/pipeline
+    functions/functions
+
+- `Source code GitHub repository <https://github.com/oyvfoss/kobbe>`_

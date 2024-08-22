@@ -25,12 +25,20 @@ sys.path.insert(0, os.path.abspath('../src/kobbe/'))
 extensions = ['sphinx.ext.autodoc',
               'sphinx.ext.coverage',
               'sphinx.ext.napoleon',
-              'myst_parser']
+              'myst_parser',
+              'sphinx.ext.mathjax',]  # For LaTeX support]
 
+
+myst_enable_extensions = [
+    "dollarmath",   # Enables LaTeX math using $...$
+]
 
 templates_path = ['_templates']
 exclude_patterns = []
 
+
+# Set the logo
+html_logo = "_static/logos/kobbe_logo.png"
 
 
 # -- Options for HTML output -------------------------------------------------

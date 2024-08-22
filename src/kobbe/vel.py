@@ -1,5 +1,5 @@
 """
-SIG_VEL.PY
+KOBBE.VEL
 
 Functions for processing ocean and sea ice drift velocity.
 """

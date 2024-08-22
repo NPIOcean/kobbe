@@ -6,23 +6,25 @@
 
 
 
-Version 0.0.1: *Under development.* 
-______
+Version 0.0.1: *Under development.*
+
 
 Overview
 --------
 
 Post-processing and basic analysis of ice and ocean data from Nortek Signature
-ADCPs. 
+ADCPs.
 
 Designed for applications where the instrument is deployed looking upward below
 the ocean surface.
 
 ![](graphics/sea_ice_illustration.png)
-______
+
+## [Documentation page](https://kobbe.readthedocs.io/) *(in development)*
+
 
   ### **GOAL:**
-   
+
   **Easy and explicit post-processing to obtain scientific-quality estimates of:**
 
   - **Sea ice draft**
@@ -31,14 +33,14 @@ ______
 ______
 
 
-Inputs to the process are: 
+Inputs to the process are:
 
-- *.mat* files exported by Norteks [SignatureDeployment](https://www.nortekgroup.com/software) software *(required)* 
+- *.mat* files exported by Norteks [SignatureDeployment](https://www.nortekgroup.com/software) software *(required)*
 - Time series of atmospheric pressure during the deployment *(strongly
-  recommended)* 
-- Time series of ocean temperature/salinity in the upper ocean *(recommended)* 
+  recommended)*
+- Time series of ocean temperature/salinity in the upper ocean *(recommended)*
 - Magnetic declination correction (single value or time series) *(necessary for
-  correct velocity directions)* 
+  correct velocity directions)*
 ______
 
 
@@ -50,19 +52,19 @@ dictionary**
 
 - Reads and concatenates data from *.mat*-files produced using Nortek's [SignatureDeployment](https://www.nortekgroup.com/software)
 software from
-  *.ad2cp* data files output by the instrument. 
-  
+  *.ad2cp* data files output by the instrument.
+
 - Stores the data in an [xarray Dataset](https://docs.xarray.dev/en/stable/generated/xarray.Dataset.html).
 
 - Present version does not read *Burst* or *Waves* data - only *Average*
   (altimeter, ocean velocities) and *AverageIce* (ice velocities).
 
 - The single ``Average_Time`` dimension is reshaped to two dimensions (``TIME``:
-  time stamp of each ensemble, and ``SAMPLE``: number of sample in ensemble). 
+  time stamp of each ensemble, and ``SAMPLE``: number of sample in ensemble).
 
   - This is useful because the instrument usually samples in ensembles, e.g.
     collects 50 samples at 1 Hz once every 20 minutes. We typically want to do
-    statistics on each ensembles to arrive at one value per ``TIME``.      
+    statistics on each ensembles to arrive at one value per ``TIME``.
 
 
 **Estimate sea ice presence based on the** *Figure-of-Merit* **metric**
@@ -75,7 +77,7 @@ software from
 - Sea ice presence is confirmed if FOM of all four beams is below a set
   threshold (default = 10 000). An estimate of "sea ice concentration" is
   calculated as the fraction of samples within an ensemble classified as ice.
-  
+
   (*NOTE: This "sea ice concentration" is most meaningful when averaged over a
   longer time period, e.g. daily.*)
 
@@ -92,7 +94,7 @@ software from
   dataset interpolated onto the ``TIME`` grid. This is useful for adding CTD
   variables (for sound speed corrections) or atmospheric pressure (for
   instrument depth correction), but can also be useful for analysis of sig500
-  data in combination with e.g. remote sensing products. 
+  data in combination with e.g. remote sensing products.
 
 **Calculate ice draft based on altimeter data**
 
@@ -114,7 +116,7 @@ software from
   salinity and temperature (from e.g. a moored CTD sensor) should be supplied in
   order to get good quality results.
 - Ice presence is determined based on the FOM (Figure-of-Merit) reading of the
-  slanted beams. 
+  slanted beams.
 
 - **Open water sound speed correction**
   - Ad hoc correction which forces the open water mean sea level to be close to zero.
@@ -126,7 +128,7 @@ software from
 - Applies magnetic declination correction (rotating the velocity vector).
 - Thresholds of FOM, quality, and speed used to filter out bad ice drift data.
 - Various thresholds (speed, quality) used to filter out ocean velocity data. -
-  Near- and above-surface measurements 
+  Near- and above-surface measurements
 
 **Ensemble processing (TBW - partially completed)**
 
@@ -136,27 +138,27 @@ software from
   tests of internal consistency.
 
 
-**Chopping of time points and depth bins (TBW)** 
+**Chopping of time points and depth bins (TBW)**
 
 - Easy chopping of depth ADCP bins or simgle time entries.
 
-**Depth interpolation (TBW)** 
+**Depth interpolation (TBW)**
 
 - Interpolation fixed-depth.
 
-**Analysis and visualization (TBW)** 
+**Analysis and visualization (TBW)**
 
 - Print basic statistics of the dataset.
 - Some very basic plots.
 
 (Not intended to contain advanced analysis tools - just what is necessary during processing)
 
-**Export (TBW)** 
+**Export (TBW)**
 
 - Functionality to export to smaller "analysis" xarray Dataset where
   unused variables are removed.
 - Functionality to export to netCDF file (.nc).
-   
+
   - *NOTE:* The resulting file *should* be formatted according to CF conventions.
     Do check your dataset closely before publication, however.
 
@@ -176,12 +178,12 @@ metadata, stores as an *xarray* Dataset.
 
 Function for calculating tilt from pitch and roll.
 
-Function for estimating ice presence/concentration. 
+Function for estimating ice presence/concentration.
 
 ``sig_append.py``
 
 Functions to append external datasets to an xarray Dataset containing Nortek
-Signature data. 
+Signature data.
 
 - General function for adding and interpolating any time series data:
 
@@ -204,11 +206,11 @@ Various functions:
 ``sig_draft.py``
 
 - Calculate depth of the scattering surface based on altimeter distance, depth,
-  and corrections for tilt, observed sound speed, and open water correction. 
-   
+  and corrections for tilt, observed sound speed, and open water correction.
+
 ``sig_open_water_correction.py``
 
-- Estimating the approximate observed mean depth of the surface in open water conditions (should ideally be 0). 
+- Estimating the approximate observed mean depth of the surface in open water conditions (should ideally be 0).
 - Calculate a sound speed correction to compensate for the observed offset from zero when recomputing draft.
 - Functions for quick analysis of changes due to the correction.
 ______________
@@ -221,10 +223,10 @@ Dependencies
 
 **Standard libraries:**
 
-- ``numpy`` 
-- ``scipy`` 
-- ``matplotlib`` 
-- ``warnings`` 
+- ``numpy``
+- ``scipy``
+- ``matplotlib``
+- ``warnings``
 
 **Other:**
 
@@ -233,7 +235,7 @@ Dependencies
 - `GSW-Python <https://teos-10.github.io/GSW-Python/>`_ - used for computation
   of depth from pressure as well as density/sound speed/etc from CTD
   measurements.
- 
+
 
 ______________
 
