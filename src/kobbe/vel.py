@@ -8,10 +8,11 @@ import numpy as np
 import xarray as xr
 from scipy.interpolate import interp1d
 import warnings
-from typing import Tuple, Union, Optional
+from typing import Tuple, Optional
 
-def calculate_ice_vel(ds: xr.Dataset, avg_method: str = "median"
-                      ) -> xr.Dataset:
+
+def calculate_ice_vel(
+        ds: xr.Dataset, avg_method: str = "median") -> xr.Dataset:
     """
     Calculate sea ice drift velocity from the AverageIce fields.
 
@@ -61,9 +62,8 @@ def calculate_ice_vel(ds: xr.Dataset, avg_method: str = "median"
     return ds
 
 
-
-def _calculate_uvice_avg(ds: xr.Dataset, avg_method: str = "median"
-                         ) -> xr.Dataset:
+def _calculate_uvice_avg(
+        ds: xr.Dataset, avg_method: str = "median") -> xr.Dataset:
     """
     Calculate ensemble average sea ice velocity.
 
@@ -90,8 +90,8 @@ def _calculate_uvice_avg(ds: xr.Dataset, avg_method: str = "median"
         ds["Vice"] = ds["vice"].mean(dim="SAMPLE")
     else:
         raise Exception(
-            'Invalid "avg_method" ("%s"). ' % avg_method
-            + 'Must be "mean" or "median".'
+            f'Invalid "avg_method" ("{avg_method}").'
+            ' Must be "mean" or "median".'
         )
 
     ds.Uice.attrs = {
@@ -124,15 +124,14 @@ def _calculate_uvice_avg(ds: xr.Dataset, avg_method: str = "median"
     ds.Vice_SD.attrs = {
         "units": "m s-1",
         "long_name": (
-            "Ensemble standard deviation of "
-            "northward sea ice drift velocity"
+            "Ensemble standard deviation of " "northward sea ice drift velocity"
         ),
     }
 
     return ds
 
-def calculate_ocean_vel(ds: xr.Dataset, avg_method: str = "median"
-                        ) -> xr.Dataset:
+
+def calculate_ocean_vel(ds: xr.Dataset, avg_method: str = "median") -> xr.Dataset:
     """
     Calculate ocean velocity from the Average_VelEast and Average_VelNorth
     fields.
@@ -187,8 +186,10 @@ def calculate_ocean_vel(ds: xr.Dataset, avg_method: str = "median"
 
     return ds
 
-def _calculate_uvocean_avg(ds: xr.Dataset, avg_method: str = "median",
-                           min_good_pct: Optional[float] = None) -> xr.Dataset:
+
+def _calculate_uvocean_avg(
+    ds: xr.Dataset, avg_method: str = "median", min_good_pct: Optional[float] = None
+) -> xr.Dataset:
     """
     Calculate ensemble average ocean velocity.
 
@@ -217,15 +218,12 @@ def _calculate_uvocean_avg(ds: xr.Dataset, avg_method: str = "median",
         ds["Vocean"] = ds.vocean.mean(dim="SAMPLE")
     else:
         raise Exception(
-            'Invalid "avg_method" ("%s"). ' % avg_method
-            + 'Must be "mean" or "median".'
+            'Invalid "avg_method" ("%s"). ' % avg_method + 'Must be "mean" or "median".'
         )
 
     if min_good_pct:
         N_before = np.sum(~np.isnan(ds.Uocean))
-        good_ind = (
-            np.isnan(ds.uocean).mean(dim="SAMPLE") < 1 - min_good_pct / 100
-        )
+        good_ind = np.isnan(ds.uocean).mean(dim="SAMPLE") < 1 - min_good_pct / 100
         N_after = np.sum(good_ind)
         min_good_str = (
             "\nRejected %i of %i ensembles (%.2f%%) with <%.1f%% good samples."
@@ -277,9 +275,8 @@ def _calculate_bin_depths(ds: xr.Dataset) -> xr.Dataset:
         Updated dataset with 'bin_depth' field added.
     """
 
-    dist_from_transducer = (
-        ds.blanking_distance_oceanvel
-        + ds.cell_size_oceanvel * (1 + np.arange(ds.N_cells_oceanvel))
+    dist_from_transducer = ds.blanking_distance_oceanvel + ds.cell_size_oceanvel * (
+        1 + np.arange(ds.N_cells_oceanvel)
     )
 
     ds["bin_depth"] = (
@@ -409,8 +406,7 @@ def uvoc_mask_range(
     # Create a boolean (*True* above bumps)
     zeros_firstbin = xr.zeros_like(ds.uocean.isel(BINS=0))
     NOT_ABOVE_BUMP = (
-        xr.concat([zeros_firstbin, is_bump.cumsum(axis=0) > 0], dim=("BINS"))
-        < 1
+        xr.concat([zeros_firstbin, is_bump.cumsum(axis=0) > 0], dim=("BINS")) < 1
     )
     ds_uv = ds_uv.where(NOT_ABOVE_BUMP)
     N_amp_bump = float(np.sum(~np.isnan(ds_uv.uocean)).data)
@@ -522,8 +518,7 @@ def rotate_vels_magdec(ds: xr.Dataset) -> xr.Dataset:
             print("-> Applying new correction.")
             ds.attrs["declination_correction"] = (
                 "!! NOTE !! Magnetic declination correction has been applied "
-                "more than once - !! CAREFUL !!\n"
-                + ds.attrs["declination_correction"]
+                "more than once - !! CAREFUL !!\n" + ds.attrs["declination_correction"]
             )
         else:
             print("-> NOT applying new correction.")
@@ -571,9 +566,7 @@ def clear_empty_bins(ds: xr.Dataset, thr_perc: float = 5) -> xr.Dataset:
     """
 
     # Find indices of empty bins
-    empty_bins = np.where(
-        np.isnan(ds.Uocean).mean("TIME") * 100 > (100 - thr_perc)
-    )[0]
+    empty_bins = np.where(np.isnan(ds.Uocean).mean("TIME") * 100 > (100 - thr_perc))[0]
     # Count
     Nbins_orig = ds.sizes["BINS"]
     Nbins_drop = len(empty_bins)
@@ -721,8 +714,7 @@ def interp_oceanvel(ds: xr.Dataset, target_depth: float) -> xr.Dataset:
 
         if nn % 10 == 0:
             print(
-                'Interpolating "Uocean" (%.1f%%)...\r'
-                % (100 * nn / ds.sizes["TIME"]),
+                'Interpolating "Uocean" (%.1f%%)...\r' % (100 * nn / ds.sizes["TIME"]),
                 end="",
             )
     print('Interpolating "Uocean": *DONE*     \r', end="")
@@ -739,8 +731,7 @@ def interp_oceanvel(ds: xr.Dataset, target_depth: float) -> xr.Dataset:
 
         if nn % 10 == 0:
             print(
-                'Interpolating "Vocean" (%.1f%%)...\r'
-                % (100 * nn / ds.sizes["TIME"]),
+                'Interpolating "Vocean" (%.1f%%)...\r' % (100 * nn / ds.sizes["TIME"]),
                 end="",
             )
     print('Interpolating "Vocean": *DONE*     \r', end="")
@@ -752,8 +743,7 @@ def interp_oceanvel(ds: xr.Dataset, target_depth: float) -> xr.Dataset:
     # Add interpolated velocities to the dataset with appropriate attributes
     ds[U_IP_name] = U_IP
     ds[U_IP_name].attrs["long_name"] = (
-        f"{ds.Uocean.attrs['long_name']} "
-        f"interpolated to {target_depth:.1f} m depth"
+        f"{ds.Uocean.attrs['long_name']} " f"interpolated to {target_depth:.1f} m depth"
     )
     ds[U_IP_name].attrs["processing_history"] = (
         f"{ds.Uocean.attrs['processing_history']} "
@@ -762,8 +752,7 @@ def interp_oceanvel(ds: xr.Dataset, target_depth: float) -> xr.Dataset:
 
     ds[V_IP_name] = V_IP
     ds[V_IP_name].attrs["long_name"] = (
-        f"{ds.Vocean.attrs['long_name']} "
-        f"interpolated to {target_depth:.1f} m depth"
+        f"{ds.Vocean.attrs['long_name']} " f"interpolated to {target_depth:.1f} m depth"
     )
     ds[V_IP_name].attrs["processing_history"] = (
         f"{ds.Vocean.attrs['processing_history']} "

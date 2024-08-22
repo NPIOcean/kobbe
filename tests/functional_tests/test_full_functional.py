@@ -135,44 +135,55 @@ def test_load_mat_files(mat_files):
     # The operation should generate a bunh of new variables:
     var_list_draft = ['SURFACE_DEPTH_LE',
         'SURFACE_DEPTH_AST',
-        'SURFACE_DEPTH_LE_UNCAPPED',
         'SEA_ICE_DRAFT_LE',
         'SEA_ICE_DRAFT_MEDIAN_LE',
         'SEA_ICE_DRAFT_AST',
         'SEA_ICE_DRAFT_MEDIAN_AST']
 
+
     # Check that these were all generated
     all_elements_in_keys_draft = all(var_name in ds.keys()
                                      for var_name in var_list_draft)
     assert all_elements_in_keys_draft, ("kobbe.icedraft.calculate_draft did"
-        " not generate all 7 expected variables (SEA_ICE_DRAFT_LE, etc).")
+        " not generate all 6 expected variables (SEA_ICE_DRAFT_LE, etc).")
     # Check that the "note" metadata field contains a note that we havent
     # applied OW correction
-    assert "OPEN WATER CORRECTION **NOT** APPLIED!" in ds.SEA_ICE_DRAFT_MEDIAN_LE.note
-    assert "OPEN WATER CORRECTION **NOT** APPLIED!" in ds.SEA_ICE_DRAFT_AST.note
-    assert "OPEN WATER CORRECTION **NOT** APPLIED!" in ds.SURFACE_DEPTH_LE.note
+    assert "No fixed offset alpha " in ds.SEA_ICE_DRAFT_MEDIAN_LE.note
+    assert "No open water corrective factor beta" in ds.SEA_ICE_DRAFT_MEDIAN_LE.note
+    assert "No fixed offset alpha " in ds.SEA_ICE_DRAFT_AST.note
+    assert "No open water corrective factor beta" in ds.SEA_ICE_DRAFT_AST.note
+    assert "No fixed offset alpha " in ds.SURFACE_DEPTH_LE.note
+    assert "No open water corrective factor beta" in ds.SURFACE_DEPTH_LE.note
 
     # Get open water sound speed correction
-    ds = kobbe.icedraft.get_Beta_from_OWSD(ds)
+    ds = kobbe.icedraft.get_open_water_correction(ds)
 
     # The operation should generate a bunch of new variables:
-    var_list_owc = ['BETA_open_water_corr_LE',
-        'BETA_open_water_corr_AST',
-        'OW_surface_before_correction_LE',
-        'OW_surface_before_correction_AST']
-    # Check that these were all generated
-    all_elements_in_keys_owc = all(var_name in ds.keys() for var_name in var_list_owc)
-    assert all_elements_in_keys_owc, ("kobbe.icedraft.get_Beta_from_OWSD did"
-        " not generate all 4 expected variables (BETA_open_water_corr_LE, etc).")
+    var_list_owc = [
+        'alpha_LE', 'alpha_AST', 'beta_LE', 'beta_AST',
+        'ow_surface_before_correction_LE_LP',
+        'ow_surface_before_correction_LE',
+        'ow_surface_before_correction_AST_LP',
+        'ow_surface_before_correction_AST']
 
+    # Check that these were all generated
+    all_elements_in_keys_owc = all(
+        var_name in ds.keys() for var_name in var_list_owc)
+    assert all_elements_in_keys_owc, (
+        "kobbe.icedraft.get_open_water_correction() did"
+        f" not generate all 8 expected variables  {var_list_owc}.")
 
     # Recalculate sea ice draft (should not use OWC)
     ds = kobbe.icedraft.calculate_draft(ds)
     # Check that the "note" metadata field NO LONGER contains a note that we havent
     # applied OW correction
-    assert "OPEN WATER CORRECTION **NOT** APPLIED!" not in ds.SEA_ICE_DRAFT_MEDIAN_LE.note
-    assert "OPEN WATER CORRECTION **NOT** APPLIED!" not in ds.SEA_ICE_DRAFT_AST.note
-    assert "OPEN WATER CORRECTION **NOT** APPLIED!" not in ds.SURFACE_DEPTH_LE.note
+    assert "No fixed offset alpha " not in ds.SEA_ICE_DRAFT_MEDIAN_LE.note
+    assert "No open water corrective factor beta" not in ds.SEA_ICE_DRAFT_MEDIAN_LE.note
+    assert "No fixed offset alpha " not in ds.SEA_ICE_DRAFT_AST.note
+    assert "No open water corrective factor beta" not in ds.SEA_ICE_DRAFT_AST.note
+    assert "No fixed offset alpha " not in ds.SURFACE_DEPTH_LE.note
+    assert "No open water corrective factor beta" not in ds.SURFACE_DEPTH_LE.note
+
 
     # Test chopping function
     L0 = ds.sizes['TIME']

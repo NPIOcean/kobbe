@@ -12,9 +12,11 @@ from kobbe import append
 
 
 def calculate_draft(
-    ds, corr_sound_speed_CTD=True, qual_thr=8000,
+    ds,
+    corr_sound_speed_CTD=True,
+    qual_thr=8000,
     LE_AST_max_sep=0.5,
-    minimum_draft = -0.5,
+    minimum_draft=-0.5,
 ):
     """
     Calculate ice draft.
@@ -37,9 +39,7 @@ def calculate_draft(
 
     # Reject LE measurements where LE diverges from AST by >LE_AST_max_sep
     if LE_AST_max_sep:
-        condition = (
-            np.abs(ds.SURFACE_DEPTH_LE - ds.SURFACE_DEPTH_AST)
-            < LE_AST_max_sep)
+        condition = np.abs(ds.SURFACE_DEPTH_LE - ds.SURFACE_DEPTH_AST) < LE_AST_max_sep
 
         _N_LE_before = (~np.isnan(ds["SURFACE_DEPTH_LE"])).sum().item()
         ds["SURFACE_DEPTH_LE"] = ds["SURFACE_DEPTH_LE"].where(condition)
@@ -93,7 +93,10 @@ def calculate_draft(
 
 
 def calculate_surface_position(
-    ds, corr_sound_speed_CTD=True, qual_thr=8000, le_ast="AST",
+    ds,
+    corr_sound_speed_CTD=True,
+    qual_thr=8000,
+    le_ast="AST",
 ):
     """
     Calculate distance between the surface measured by the altimeter
@@ -119,17 +122,15 @@ def calculate_surface_position(
     # Obtain tilt factor
     tilt_factor = np.cos(np.pi * ds.tilt_Average / 180)
 
-    note_str += (
-        "\n- Altimeter distance adjusted for instrument tilt."
-    )
+    note_str += "\n- Altimeter distance adjusted for instrument tilt."
 
     # Obtain factor of "true" sound speed (from CTD data) vs nominal
     # sound speed (from the Average_Soundspeed field)
     if hasattr(ds, "sound_speed_CTD") and corr_sound_speed_CTD:
         # Ratio between observed and nominal sound speed
         sound_speed_ratio_obs_nom = (
-            ds.sound_speed_CTD.data[:, np.newaxis]
-            / ds.Average_Soundspeed.data)
+            ds.sound_speed_CTD.data[:, np.newaxis] / ds.Average_Soundspeed.data
+        )
 
         note_str += (
             "\n- Altimeter distance recomputed using updated "
@@ -157,9 +158,7 @@ def calculate_surface_position(
         )
     else:
         alpha = 0
-        note_str += (
-            "\n- (No fixed offset alpha applied to the altimeter distance)."
-        )
+        note_str += "\n- (No fixed offset alpha applied to the altimeter distance)."
 
     # Wrap out beta_ to the full 2D shape so we can apply it below
     if beta_key in ds:
@@ -179,15 +178,12 @@ def calculate_surface_position(
             "\n- (No open water corrective factor beta applied to the "
             "altimeter distance.)"
         )
-        beta_mean, beta_max, beta_min = 'N/A', 'N/A', 'N/A'
+        beta_mean, beta_max, beta_min = "N/A", "N/A", "N/A"
     # Calculate the surface position (depth of the scattering surface detected
     # by LE or AST algorithm below the water surface)
     surface_position = (
         ds.depth
-        - ds[alt_dist_attr]
-        * tilt_factor
-        * sound_speed_ratio_obs_nom
-        * beta
+        - ds[alt_dist_attr] * tilt_factor * sound_speed_ratio_obs_nom * beta
         - alpha
     )
 
@@ -209,14 +205,14 @@ def calculate_surface_position(
             ),
             "units": "m",
             "note": note_str,
-
-            'tilt_correction_mean': np.round(tilt_factor.mean().item(), 4),
-            'sound_speed_ratio_mean': np.round(
-                sound_speed_ratio_obs_nom.mean().item(), 4),
-            'fixed_offset_alpha_cm': np.round(alpha*1e2, 4),
-            'varying_ss_factor_beta_mean': beta_mean,
-            'varying_ss_factor_beta_max': beta_max,
-            'varying_ss_factor_beta_min': beta_min,
+            "tilt_correction_mean": np.round(tilt_factor.mean().item(), 4),
+            "sound_speed_ratio_mean": np.round(
+                sound_speed_ratio_obs_nom.mean().item(), 4
+            ),
+            "fixed_offset_alpha_cm": np.round(alpha * 1e2, 4),
+            "varying_ss_factor_beta_mean": beta_mean,
+            "varying_ss_factor_beta_max": beta_max,
+            "varying_ss_factor_beta_min": beta_min,
         },
     )
 
@@ -230,8 +226,9 @@ def get_open_water_surface_depth(ds, method="LE"):
     Returns DataArray containing the same variable as the input -
     but with ice entries masked.
     """
-    open_water_surface_depth = (
-        ds["SURFACE_DEPTH_%s" % method].where(ds.ICE_IN_SAMPLE_ANY==False))
+    open_water_surface_depth = ds["SURFACE_DEPTH_%s" % method].where(
+        ds.ICE_IN_SAMPLE_ANY == False
+    )
     return open_water_surface_depth
 
 
@@ -265,8 +262,8 @@ def get_open_water_surface_depth_LP(
     OWSD_full_median = clean_nanmedian(open_water_surface_depth)
 
     OWSD_filt = open_water_surface_depth.where(
-        np.abs(open_water_surface_depth - OWSD_full_median)
-        < thr_reject_from_net_median)
+        np.abs(open_water_surface_depth - OWSD_full_median) < thr_reject_from_net_median
+    )
 
     # 2. Compute ensemble medians
     OWSD_med = OWSD_filt.median(dim="SAMPLE")
@@ -277,12 +274,11 @@ def get_open_water_surface_depth_LP(
         open_water_surface_depth.TIME,
         min_frac=min_frac_daily,
         axis=-1,
-        function="median"
+        function="median",
     )
 
     # 4. Interpolate to continuous function (daily)
-    Ad_interp = interp1d(td.data[~np.isnan(Ad)], Ad[~np.isnan(Ad)],
-                         bounds_error=False)(
+    Ad_interp = interp1d(td.data[~np.isnan(Ad)], Ad[~np.isnan(Ad)], bounds_error=False)(
         td.data
     )
 
@@ -292,6 +288,7 @@ def get_open_water_surface_depth_LP(
     # Export filtered, ensemble median, daily averaged, smoothed daily OWSD.
     # Also daily time array (td+0.5) of the midpoint of the daily estimates.
     return RS["mean"], td + 0.5
+
 
 ###########
 
@@ -315,13 +312,13 @@ def get_open_water_correction(
         ow_surface_depth_full_LE,
         thr_reject_from_net_median=thr_reject_from_net_median,
         min_frac_daily=min_frac_daily,
-        run_window_days=run_window_days
+        run_window_days=run_window_days,
     )
     ow_surface_depth_LP_AST, td = get_open_water_surface_depth_LP(
         ow_surface_depth_full_AST,
         thr_reject_from_net_median=thr_reject_from_net_median,
         min_frac_daily=min_frac_daily,
-        run_window_days=run_window_days
+        run_window_days=run_window_days,
     )
 
     # Obtain daily, smoothed instrument depths
@@ -341,10 +338,8 @@ def get_open_water_correction(
 
     # Obtain BETA (time-varying sound speed correction)
     if ss_factor:
-        beta_LE = ((depth_lp - alpha_LE)
-                   / (depth_lp - ow_surface_depth_LP_LE))
-        beta_AST = ((depth_lp - alpha_AST)
-                    / (depth_lp - ow_surface_depth_LP_AST))
+        beta_LE = (depth_lp - alpha_LE) / (depth_lp - ow_surface_depth_LP_LE)
+        beta_AST = (depth_lp - alpha_AST) / (depth_lp - ow_surface_depth_LP_AST)
     else:
         beta_LE, beta_AST = np.ones(len(td)), np.ones(len(td))
 
@@ -360,14 +355,16 @@ def get_open_water_correction(
     ds = append.add_to_sigdata(
         ds, ow_surface_depth_LP_LE, td, "ow_surface_before_correction_LE_LP"
     )
-    ds["ow_surface_before_correction_LE"] = (
-        ow_surface_depth_full_LE.median(dim="SAMPLE"))
+    ds["ow_surface_before_correction_LE"] = ow_surface_depth_full_LE.median(
+        dim="SAMPLE"
+    )
 
     ds = append.add_to_sigdata(
         ds, ow_surface_depth_LP_AST, td, "ow_surface_before_correction_AST_LP"
     )
-    ds["ow_surface_before_correction_AST"] = (
-        ow_surface_depth_full_AST.median(dim="SAMPLE"))
+    ds["ow_surface_before_correction_AST"] = ow_surface_depth_full_AST.median(
+        dim="SAMPLE"
+    )
 
     return ds
 
@@ -429,36 +426,55 @@ def compare_open_water_correction(ds, show_plots=True):
 
         fig, ax = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
 
-        ax[0].plot_date(ds2.TIME,
-                        ds.ow_surface_before_correction_LE,
-                        ".", label="LE", color='tab:blue')
-        ax[0].plot_date(ds2.TIME,
-                        ds.ow_surface_before_correction_LE_LP,
-                        "-", label="LE (LP filtered)",
-                        color='tab:blue')
-        ax[0].axhline(ds.alpha_LE, ls = ':', color='tab:blue', label='LE Fixed offset $\\alpha$')
+        ax[0].plot_date(
+            ds2.TIME,
+            ds.ow_surface_before_correction_LE,
+            ".",
+            label="LE",
+            color="tab:blue",
+        )
+        ax[0].plot_date(
+            ds2.TIME,
+            ds.ow_surface_before_correction_LE_LP,
+            "-",
+            label="LE (LP filtered)",
+            color="tab:blue",
+        )
+        ax[0].axhline(
+            ds.alpha_LE, ls=":", color="tab:blue", label="LE Fixed offset $\\alpha$"
+        )
 
-        ax[0].plot_date(ds2.TIME,
-                        ds.ow_surface_before_correction_AST,
-                        ".", label="AST", color='tab:orange')
-        ax[0].plot_date(ds2.TIME,
-                        ds.ow_surface_before_correction_AST_LP,
-                        "-", label="AST (LP filtered)",
-                        color='tab:orange')
+        ax[0].plot_date(
+            ds2.TIME,
+            ds.ow_surface_before_correction_AST,
+            ".",
+            label="AST",
+            color="tab:orange",
+        )
+        ax[0].plot_date(
+            ds2.TIME,
+            ds.ow_surface_before_correction_AST_LP,
+            "-",
+            label="AST (LP filtered)",
+            color="tab:orange",
+        )
 
-        ax[0].axhline(ds.alpha_AST, ls = ':', color='tab:orange', label='AST Fixed offset $\\alpha$')
+        ax[0].axhline(
+            ds.alpha_AST, ls=":", color="tab:orange", label="AST Fixed offset $\\alpha$"
+        )
 
         ax[1].plot_date(ds2.TIME, ds.beta_LE, "-", label="LE")
         ax[1].plot_date(ds2.TIME, ds.beta_AST, "-", label="AST")
 
         for axn in ax:
-            axn.legend(ncol = 2)
+            axn.legend(ncol=2)
             axn.grid()
         labfs = 9
-        ax[0].set_ylabel("Estimated open water\nsurface depth [m]",
-                         fontsize=labfs)
-        ax[1].set_ylabel("$\\beta$ (open water altimeter \ndistance"
-                         " correction factor)", fontsize=labfs)
+        ax[0].set_ylabel("Estimated open water\nsurface depth [m]", fontsize=labfs)
+        ax[1].set_ylabel(
+            "$\\beta$ (open water altimeter \ndistance" " correction factor)",
+            fontsize=labfs,
+        )
         ax[0].set_ylim(1, -0.4)
 
         #
