@@ -27,21 +27,7 @@ sphinx:
 # Optional but recommended, declare the Python requirements required
 # to build your documentation
 # See https://docs.readthedocs.io/en/stable/guides/reproducible-builds.html
-# python:
-#    install:
-#    - requirements: docs/requirements.txt
+ python:
+    install:
+    - requirements: docs/requirements.txt
 
-
-# Specify dependencies directly
-pip:
-  packages:
-    - sphinx
-    - sphinx-autodoc-typehints
-    - sphinxcontrib-napoleon
-    - myst-parser
-
-# Custom build commands
-commands:
-  - sphinx-build -b html docs/ _build/html  # Adjust paths if necessary
-
-Explanation
