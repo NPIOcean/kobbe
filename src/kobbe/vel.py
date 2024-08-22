@@ -2,6 +2,7 @@
 KOBBE.VEL
 
 Functions for processing ocean and sea ice drift velocity.
+
 """
 
 import numpy as np
@@ -63,7 +64,8 @@ def calculate_ice_vel(
 
 
 def _calculate_uvice_avg(
-        ds: xr.Dataset, avg_method: str = "median") -> xr.Dataset:
+        ds: xr.Dataset,
+        avg_method: str = "median") -> xr.Dataset:
     """
     Calculate ensemble average sea ice velocity.
 
@@ -124,14 +126,17 @@ def _calculate_uvice_avg(
     ds.Vice_SD.attrs = {
         "units": "m s-1",
         "long_name": (
-            "Ensemble standard deviation of " "northward sea ice drift velocity"
+            "Ensemble standard deviation of "
+            "northward sea ice drift velocity"
         ),
     }
 
     return ds
 
 
-def calculate_ocean_vel(ds: xr.Dataset, avg_method: str = "median") -> xr.Dataset:
+def calculate_ocean_vel(
+        ds: xr.Dataset,
+        avg_method: str = "median") -> xr.Dataset:
     """
     Calculate ocean velocity from the Average_VelEast and Average_VelNorth
     fields.
@@ -188,7 +193,9 @@ def calculate_ocean_vel(ds: xr.Dataset, avg_method: str = "median") -> xr.Datase
 
 
 def _calculate_uvocean_avg(
-    ds: xr.Dataset, avg_method: str = "median", min_good_pct: Optional[float] = None
+    ds: xr.Dataset,
+    avg_method: str = "median",
+    min_good_pct: Optional[float] = None
 ) -> xr.Dataset:
     """
     Calculate ensemble average ocean velocity.
@@ -218,21 +225,19 @@ def _calculate_uvocean_avg(
         ds["Vocean"] = ds.vocean.mean(dim="SAMPLE")
     else:
         raise Exception(
-            'Invalid "avg_method" ("%s"). ' % avg_method + 'Must be "mean" or "median".'
+            f'Invalid "avg_method" ("{avg_method}"). '
+            'Must be "mean" or "median".'
         )
 
     if min_good_pct:
         N_before = np.sum(~np.isnan(ds.Uocean))
-        good_ind = np.isnan(ds.uocean).mean(dim="SAMPLE") < 1 - min_good_pct / 100
+        good_ind = (np.isnan(ds.uocean).mean(dim="SAMPLE") < 1
+                    - min_good_pct / 100)
         N_after = np.sum(good_ind)
         min_good_str = (
-            "\nRejected %i of %i ensembles (%.2f%%) with <%.1f%% good samples."
-            % (
-                N_before - N_after,
-                N_before,
-                (N_before - N_after) / N_before * 100,
-                min_good_pct,
-            )
+            f"\nRejected {N_before - N_after} of {N_before} ensembles"
+            f" ({(N_before - N_after) / N_before * 100:.2f}%) with "
+            f"<{min_good_pct:.1f}% good samples."
         )
         ds["Uocean"] = ds.Uocean.where(good_ind)
         ds["Vocean"] = ds.Vocean.where(good_ind)
@@ -275,12 +280,15 @@ def _calculate_bin_depths(ds: xr.Dataset) -> xr.Dataset:
         Updated dataset with 'bin_depth' field added.
     """
 
-    dist_from_transducer = ds.blanking_distance_oceanvel + ds.cell_size_oceanvel * (
-        1 + np.arange(ds.N_cells_oceanvel)
+    dist_from_transducer = (
+        ds.blanking_distance_oceanvel
+        + ds.cell_size_oceanvel
+        * (1 + np.arange(ds.N_cells_oceanvel))
     )
 
     ds["bin_depth"] = (
-        ds.depth.mean(dim="SAMPLE").expand_dims(dim={"BINS": ds.sizes["BINS"]})
+        ds.depth.mean(dim="SAMPLE").expand_dims(
+            dim={"BINS": ds.sizes["BINS"]})
         - dist_from_transducer[:, np.newaxis]
     )
     ds["bin_depth"].attrs = {
@@ -406,32 +414,32 @@ def uvoc_mask_range(
     # Create a boolean (*True* above bumps)
     zeros_firstbin = xr.zeros_like(ds.uocean.isel(BINS=0))
     NOT_ABOVE_BUMP = (
-        xr.concat([zeros_firstbin, is_bump.cumsum(axis=0) > 0], dim=("BINS")) < 1
+        xr.concat([zeros_firstbin, is_bump.cumsum(axis=0) > 0],
+                  dim=("BINS")) < 1
     )
     ds_uv = ds_uv.where(NOT_ABOVE_BUMP)
     N_amp_bump = float(np.sum(~np.isnan(ds_uv.uocean)).data)
 
     proc_string = (
-        "\nTHRESHOLD-BASED DATA CLEANING : "
-        + "\nStart: %i initial valid samples.\n" % N_start
-        + "Dropping (NaNing samples where):\n"
-        + "- # Speed < %.2f ms-1 # -> Dropped %i pts (%.2f%%)\n"
-        % (uv_max, N_start - N_speed, (N_start - N_speed) / N_start * 100)
-        + "- # Tilt < %.2f deg # -> Dropped %i pts (%.2f%%)\n"
-        % (tilt_max, N_speed - N_tilt, (N_speed - N_tilt) / N_speed * 100)
-        + "- # Sound sp in [%.0f, %.0f] ms-1 # -> Dropped %i pts (%.2f%%)\n"
-        % (*sspd_range, N_tilt - N_sspd, (N_tilt - N_sspd) / N_tilt * 100)
-        + "- # Corr (all beams) < %.1f %% # -> Dropped %i pts (%.2f%%)\n"
-        % (cor_min, N_sspd - N_cor, (N_sspd - N_cor) / N_sspd * 100)
-        + "- # Amp (all beams) in [%.0f, %.0f] db # -> Dropped %i pts (%.2f%%)##\n"
-        % (*amp_range, N_cor - N_amp, (N_cor - N_amp) / N_cor * 100)
-        + "- # Above amp bumps > %.0f db # -> Dropped %i pts (%.2f%%)\n"
-        % (
-            max_amp_increase,
-            N_amp - N_amp_bump,
-            (N_amp - N_amp_bump) / N_amp * 100,
-        )
-        + "End: %i valid samples.\n" % N_amp_bump
+        f"\nTHRESHOLD-BASED DATA CLEANING : "
+        f"\nStart: {N_start} initial valid samples.\n"
+        f"Dropping (NaNing samples where):\n"
+        f"- # Speed < {uv_max:.2f} ms-1 # -> Dropped {N_start - N_speed} pts "
+        f"({(N_start - N_speed) / N_start * 100:.2f}%%)\n"
+        f"- # Tilt < {tilt_max:.2f} deg # -> Dropped {N_speed - N_tilt} pts "
+        f"({(N_speed - N_tilt) / N_speed * 100:.2f}%%)\n"
+        f"- # Sound sp in [{sspd_range[0]:.0f}, {sspd_range[1]:.0f}] ms-1 # ->"
+        f" Dropped {N_tilt - N_sspd} pts "
+        f"({(N_tilt - N_sspd) / N_tilt * 100:.2f}%%)\n"
+        f"- # Corr (all beams) < {cor_min:.1f} %% # -> Dropped "
+        f"{N_sspd - N_cor} pts ({(N_sspd - N_cor) / N_sspd * 100:.2f}%%)\n"
+        f"- # Amp (all beams) in [{amp_range[0]:.0f}, {amp_range[1]:.0f}] db "
+        f"# -> Dropped {N_cor - N_amp} pts "
+        f"({(N_cor - N_amp) / N_cor * 100:.2f}%%)\n"
+        f"- # Above amp bumps > {max_amp_increase:.0f} db # -> Dropped "
+        f"{N_amp - N_amp_bump} pts "
+        f"({(N_amp - N_amp_bump) / N_amp * 100:.2f}%%)\n"
+        f"End: {N_amp_bump} valid samples.\n"
     )
 
     for key in ["uocean", "vocean"]:
@@ -518,7 +526,8 @@ def rotate_vels_magdec(ds: xr.Dataset) -> xr.Dataset:
             print("-> Applying new correction.")
             ds.attrs["declination_correction"] = (
                 "!! NOTE !! Magnetic declination correction has been applied "
-                "more than once - !! CAREFUL !!\n" + ds.attrs["declination_correction"]
+                "more than once - !! CAREFUL !!\n"
+                + ds.attrs["declination_correction"]
             )
         else:
             print("-> NOT applying new correction.")
@@ -529,12 +538,12 @@ def rotate_vels_magdec(ds: xr.Dataset) -> xr.Dataset:
         )
     try:
         ds = _calculate_uvocean_avg(ds, avg_method="median")
-    except:
-        pass
+    except Exception as e:
+        print(f"uvocean_avg failed: {e}")
     try:
         ds = _calculate_uvice_avg(ds, avg_method="median")
-    except:
-        pass
+    except Exception as e:
+        print(f"uvice_avg failed: {e}")
 
     return ds
 
@@ -566,7 +575,9 @@ def clear_empty_bins(ds: xr.Dataset, thr_perc: float = 5) -> xr.Dataset:
     """
 
     # Find indices of empty bins
-    empty_bins = np.where(np.isnan(ds.Uocean).mean("TIME") * 100 > (100 - thr_perc))[0]
+    empty_bins = np.where(
+        np.isnan(ds.Uocean).mean("TIME")
+        * 100 > (100 - thr_perc))[0]
     # Count
     Nbins_orig = ds.sizes["BINS"]
     Nbins_drop = len(empty_bins)
@@ -584,16 +595,20 @@ def clear_empty_bins(ds: xr.Dataset, thr_perc: float = 5) -> xr.Dataset:
 
 def reject_sidelobe(ds: xr.Dataset) -> xr.Dataset:
     """
-    Mask samples where we expect sidelobe interference based on the calculated maximum range (Rmax).
+    Mask samples where we expect sidelobe interference based on the calculated
+    maximum range (Rmax).
 
-    From Nortek documentation (nortekgroup.com/assets/software/N3015-011-SignaturePrinciples.pdf):
+    From Nortek documentation
+    (nortekgroup.com/assets/software/N3015-011-SignaturePrinciples.pdf):
+
     Maximum range Rmax is given by:
 
     (1)    Rmax = A * cos(θ) - s_c
 
     Where:
         - A is the distance between the transducer and the surface.
-        - θ (theta) is the beam angle, assumed to be 25 degrees for Nortek Signatures.
+        - θ (theta) is the beam angle, assumed to be 25 degrees for Nortek
+          Signatures.
         - s_c is the velocity cell size.
 
     The distance A is calculated as:
@@ -602,23 +617,26 @@ def reject_sidelobe(ds: xr.Dataset) -> xr.Dataset:
 
     Where:
         - DEP is the sample-mean depth of the water column.
-        - ICE_DRAFT is the sample-mean sea ice draft (using SEA_ICE_DRAFT_MEDIAN_LE if available, otherwise 0).
+        - ICE_DRAFT is the sample-mean sea ice draft (using
+          SEA_ICE_DRAFT_MEDIAN_LE if available, otherwise 0).
 
     We use the sample mean tilt for θ.
 
-    This function identifies and masks (sets to NaN) the velocity samples (`uocean`, `vocean`) in regions
-    close enough to the surface where sidelobe interference is expected, based on the calculated Rmax.
+    This function identifies and masks (sets to NaN) the velocity samples
+    (`uocean`, `vocean`) in regions close enough to the surface where sidelobe
+     interference is expected, based on the calculated Rmax.
 
     Parameters:
     -----------
     ds : xr.Dataset
-        The input dataset containing ocean velocity components (`uocean`, `vocean`), depth, bin depth,
-        and possibly sea ice draft information.
+        The input dataset containing ocean velocity components (`uocean`,
+        `vocean`), depth, bin depth, and possibly sea ice draft information.
 
     Returns:
     --------
     xr.Dataset
-        The dataset with sidelobe-affected velocity samples masked (set to NaN).
+        The dataset with sidelobe-affected velocity samples masked
+        (set to NaN).
     """
 
     if "depth" in ds.keys():
@@ -659,9 +677,9 @@ def reject_sidelobe(ds: xr.Dataset) -> xr.Dataset:
 
     # + Add processing history
     proc_string = (
-        "\nRejected samples close enough to the surface "
-        "to be affected by sidelobe interference (rejecting "
-        "%.2f%% of velocity samples)." % ((1 - N_after / N_before) * 100)
+        f"\nRejected samples close enough to the surface "
+        f"to be affected by sidelobe interference (rejecting "
+        f"{(1 - N_after / N_before) * 100:.2f}%% of velocity samples)."
     )
 
     for key in ["uocean", "vocean"]:
@@ -714,9 +732,11 @@ def interp_oceanvel(ds: xr.Dataset, target_depth: float) -> xr.Dataset:
 
         if nn % 10 == 0:
             print(
-                'Interpolating "Uocean" (%.1f%%)...\r' % (100 * nn / ds.sizes["TIME"]),
+                'Interpolating "Uocean" ('
+                f'{100 * nn / ds.sizes["TIME"]:.1f}%%)...\r',
                 end="",
             )
+
     print('Interpolating "Uocean": *DONE*     \r', end="")
 
     # Interpolate Vocean onto the fixed depth
@@ -731,9 +751,11 @@ def interp_oceanvel(ds: xr.Dataset, target_depth: float) -> xr.Dataset:
 
         if nn % 10 == 0:
             print(
-                'Interpolating "Vocean" (%.1f%%)...\r' % (100 * nn / ds.sizes["TIME"]),
+                'Interpolating "Vocean" '
+                f'({100 * nn / ds.sizes["TIME"]:.1f}%%)...\r',
                 end="",
             )
+
     print('Interpolating "Vocean": *DONE*     \r', end="")
 
     # Create variable names based on the target depth
@@ -743,7 +765,8 @@ def interp_oceanvel(ds: xr.Dataset, target_depth: float) -> xr.Dataset:
     # Add interpolated velocities to the dataset with appropriate attributes
     ds[U_IP_name] = U_IP
     ds[U_IP_name].attrs["long_name"] = (
-        f"{ds.Uocean.attrs['long_name']} " f"interpolated to {target_depth:.1f} m depth"
+        f"{ds.Uocean.attrs['long_name']} "
+        f"interpolated to {target_depth:.1f} m depth"
     )
     ds[U_IP_name].attrs["processing_history"] = (
         f"{ds.Uocean.attrs['processing_history']} "
@@ -752,7 +775,8 @@ def interp_oceanvel(ds: xr.Dataset, target_depth: float) -> xr.Dataset:
 
     ds[V_IP_name] = V_IP
     ds[V_IP_name].attrs["long_name"] = (
-        f"{ds.Vocean.attrs['long_name']} " f"interpolated to {target_depth:.1f} m depth"
+        f"{ds.Vocean.attrs['long_name']} "
+        f"interpolated to {target_depth:.1f} m depth"
     )
     ds[V_IP_name].attrs["processing_history"] = (
         f"{ds.Vocean.attrs['processing_history']} "

@@ -1,3 +1,10 @@
+"""
+KOBBE.TOOLBOX
+
+Various useful functions for plotting and examining the data.
+
+"""
+
 from typing import Optional, Tuple
 import numpy as np
 import matplotlib.pyplot as plt

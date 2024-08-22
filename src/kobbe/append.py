@@ -1,35 +1,8 @@
 """
-Module for appending external datasets to an xarray Dataset containing Nortek
-Signature data.
+KOBBE:APPEND
 
-This module provides functions for appending and interpolating external
-datasets to an xarray Dataset containing Nortek Signature data. The
-functionalities include:
-
-1. **General Data Addition and Interpolation**:
-- `add_to_sigdata`: Appends and interpolates any time series data to the
-   xarray Dataset, aligning it with the "TIME" coordinate.
-
-2. **Specialized Data Wrappers** - for variables that are used in
-   subsequent processing steps and need to be strictly formatted:
-    - `append_ctd`: Integrates CTD (Conductivity-Temperature-Depth) data
-      from an auxilliary sensor, converting it to TEOS-10 variables, and
-      computes sound speed and density using the GSW module.
-    - `append_atm_pres`: Adds atmospheric pressure data, such as sea
-      level pressure, to the dataset, with interpolation onto the
-      Signature data's time grid.
-    - `append_magdec`: Appends magnetic declination data for correcting
-      observed velocities. Supports both fixed values and time-varying
-      arrays.
-
-3. **Helper functions**:
-- `set_lat` and `set_lon`: Set latitude and longitude values in the dataset.
-
-
-4. **Calculation based on Signature data**:
-- `add_SIC_FOM`: Computes sea ice presence and concentration estimates based
-   on Figure-of-Merit (FOM) metrics from the slanted beams.
-- `add_tilt`: Calculates tilt from pitch and roll data.
+Functions for appending and interpolating external
+datasets to an xarray Dataset containing Nortek Signature data.
 
 """
 
