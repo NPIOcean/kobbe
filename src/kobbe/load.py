@@ -10,7 +10,8 @@ TO DO:
 - Time: Specify epoch?
 
 - Investigate what the RuntimeError is in the tilt function..
-- Look over what print messages are necessary (definitely cut some from the reshaper)
+- Look over what print messages are necessary (definitely cut some from the
+  reshaper)
 
 """
 
@@ -23,7 +24,6 @@ from scipy.io import loadmat
 import xarray as xr
 from matplotlib.dates import num2date, date2num
 import matplotlib.pyplot as plt
-from IPython.display import display
 from kobbe.calc import mat_to_py_time
 from kobbe.append import _add_tilt, _add_SIC_FOM, set_lat, set_lon
 from datetime import datetime
@@ -45,7 +45,8 @@ def matfiles_to_dataset(
     time_range: Optional[Tuple[Optional[str], Optional[str]]] = None,
 ) -> xr.Dataset:
     """
-    Read, convert, and concatenate .mat files exported from SignatureDeployment.
+    Read, convert, and concatenate .mat files exported from
+    SignatureDeployment.
 
     Parameters
     ----------
@@ -56,16 +57,20 @@ def matfiles_to_dataset(
         to 2D ('TIME', 'SAMPLE') where TIME is the mean time of each ensemble
         and SAMPLE is each sample in the ensemble. Default is True.
     lat : Optional[float], optional
-        Latitude of deployment. If None, this information is not included. Default is None.
+        Latitude of deployment. If None, this information is not included.
+        Default is None.
     lon : Optional[float], optional
-        Longitude of deployment. If None, this information is not included. Default is None.
+        Longitude of deployment. If None, this information is not included.
+        Default is None.
     include_raw_altimeter : bool, optional
-        Include raw altimeter signal if available (typically on a single time grid). Default is False.
+        Include raw altimeter signal if available (typically on a single time
+        grid). Default is False.
     FOM_ice_threshold : float, optional
         Threshold for "Figure of Merit" in the ice ADCP pings used to separate
         measurements in ice from measurements of water. Default is 1e4.
     time_range : Optional[Tuple[Optional[str], Optional[str]]], optional
-        Only accept data within this date range. Provide a tuple of date strings in 'DD.MM.YYYY' format.
+        Only accept data within this date range. Provide a tuple of date
+        trings in 'DD.MM.YYYY' format.
         Default is None, which includes all data.
 
     Returns
@@ -83,7 +88,6 @@ def matfiles_to_dataset(
     The function assumes that the provided .mat files are structured in a way
     that can be handled by the internal `_matfile_to_dataset`, `_add_tilt`,
     `_reshape_ensembles`, `set_lat`, `set_lon`, and `_add_SIC_FOM` functions.
-    Ensure that these functions are correctly implemented and available in the scope.
     """
 
     # Convert directory input to a list of .mat files
@@ -93,7 +97,8 @@ def matfiles_to_dataset(
         file_list = file_input
     else:
         raise ValueError(
-            "file_input must be a list of file paths or a directory containing .mat files."
+            "file_input must be a list of file paths or a directory"
+            " containing .mat files."
         )
 
     if len(file_list) == 0:
@@ -110,7 +115,7 @@ def matfiles_to_dataset(
     else:
         time_max = None
 
-    ###########################################################################
+    ##########################################################################
     # LOAD AND CONCATENATE DATA
 
     first = True
@@ -118,12 +123,14 @@ def matfiles_to_dataset(
 
     if len(file_list) == 0:
         raise ValueError(
-            "The *file_list* given to the function " "matfiles_to_dataset() is empty."
+            "The *file_list* given to the function " "matfiles_to_dataset()"
+            " is empty."
         )
 
     for filename in file_list:
         ds_single, pressure_offset = _matfile_to_dataset(
-            filename, lat=lat, lon=lon, include_raw_altimeter=include_raw_altimeter
+            filename, lat=lat, lon=lon,
+            include_raw_altimeter=include_raw_altimeter
         )
 
         ds_single = ds_single.sel({"time_average": slice(time_min, time_max)})
@@ -139,8 +146,6 @@ def matfiles_to_dataset(
                 ds = xr.concat([ds, ds_single], dim="time_average")
             except Exception as e:
                 print(f"Failed at {filename[-10:]} with error: {e}")
-
-    ###########################0################################################
 
     # Reads the pressure offset(s), i.e. the fixed atmospheric pressure
     # used to obtain sea pressure-
@@ -173,16 +178,17 @@ def matfiles_to_dataset(
     ds["FOM_threshold"] = (
         (),
         FOM_ice_threshold,
-        {"description": "Figure-of-merit threshold used to separate ice vs open water"},
+        {"description":
+         "Figure-of-merit threshold used to separate ice vs open water"},
     )
 
     # Add sea ice concentration estimate from FOM
     ds = _add_SIC_FOM(ds)
 
     # Add history attribute
-    ds.attrs["history"] = "- Loaded from .mat files on" " %s" % datetime.now().strftime(
-        "%d %b %Y."
-    )
+    now_date_str = datetime.now().strftime(
+        "%d %b %Y.")
+    ds.attrs["history"] = f"- Loaded from .mat files on {now_date_str}"
 
     print("Done. Run kobbe.load.overview()) to print some additional details.")
 

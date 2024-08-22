@@ -1,20 +1,35 @@
 """
-Functions to append external datasets to an xarray Dataset containing Nortek
+Module for appending external datasets to an xarray Dataset containing Nortek
 Signature data.
 
-- General function for adding and interpolating any time series data:
+This module provides functions for appending and interpolating external
+datasets to an xarray Dataset containing Nortek Signature data. The
+functionalities include:
 
-Some specialized wrapper functions used for loading data that
-needs to be formatted correctly in later operations:
+1. **General Data Addition and Interpolation**:
+- `add_to_sigdata`: Appends and interpolates any time series data to the
+   xarray Dataset, aligning it with the "TIME" coordinate.
 
-- Add CTD data and compute sound speed (for ice draft calculations)
-- Add air pressure (for instrument depth corrections)
-- Add magnetic declination (for correction of velocity directions)
+2. **Specialized Data Wrappers** - for variables that are used in
+   subsequent processing steps and need to be strictly formatted:
+    - `append_ctd`: Integrates CTD (Conductivity-Temperature-Depth) data
+      from an auxilliary sensor, converting it to TEOS-10 variables, and
+      computes sound speed and density using the GSW module.
+    - `append_atm_pres`: Adds atmospheric pressure data, such as sea
+      level pressure, to the dataset, with interpolation onto the
+      Signature data's time grid.
+    - `append_magdec`: Appends magnetic declination data for correcting
+      observed velocities. Supports both fixed values and time-varying
+      arrays.
 
-TO DO:
-- Check air pressure wrapper.
-- Think about whether the ERA-5 picker should be retained here or elsewhere
-  (otherwise remove)
+3. **Helper functions**:
+- `set_lat` and `set_lon`: Set latitude and longitude values in the dataset.
+
+
+4. **Calculation based on Signature data**:
+- `add_SIC_FOM`: Computes sea ice presence and concentration estimates based
+   on Figure-of-Merit (FOM) metrics from the slanted beams.
+- `add_tilt`: Calculates tilt from pitch and roll data.
 
 """
 
@@ -210,7 +225,6 @@ def append_ctd(
         extrapolate=extrapolate,
     )
     return ds
-
 
 
 def append_atm_pres(
@@ -586,51 +600,3 @@ def _add_SIC_FOM(
     )
 
     return ds
-
-
-# ERA-5 retrieval deprecated for now (decided for now that this is best suited
-# elsewhere as users may do this differently. This way is a bit cumbersome
-# anyways..)
-
-if False:
-
-    def get_era5(dx, temp_2m=False, wind_10m=False):
-        """
-        Read ERA-5 variables in the nearest model grid cell:
-
-        - Sea level pressure [dbar] (Used for depth correction)
-        - 2-m air temperature [deg C] (Optional - toggle with *temp_2m=True*)
-        - 10-m wind components [m s-1] (Optional - toggle with *wind_10m=True*)
-
-        Adds to the sig500 dictionary as 1D variables interpolated to the
-        *time* grid.
-
-        Accessing hourly ERA-5 data over OpenDap from the Asia-Pacific Data
-        Research Center (http://apdrc.soest.hawaii.edu/datadoc/ecmwf_ERA5.php).
-
-        Note: Accessing the data can take as much as tens of minutes.
-        """
-        # Loading remote datasets
-        # This operation can take 10-20 seconds
-        era5_url = (
-            "http://apdrc.soest.hawaii.edu:80/dods/public_data/"
-            "Reanalysis_Data/ERA5/hourly/"
-        )
-
-        print("Connecting to ERA5 MSL remote dataset..")
-        era5_msl = xr.open_dataset(era5_url + "Surface_pressure")
-        if temp_2m:
-            print("Connecting to ERA5 2-m air temperature remote dataset..")
-            era5_msl = xr.open_dataset(era5_url + "2m_temperature")
-        if wind_10m:
-            print("Connecting to ERA5 10-m wind remote datasets..")
-            era5_uwind = xr.open_dataset(era5_url + "U_wind_component_10m")
-            era5_vwind = xr.open_dataset(era5_url + "V_wind_component_10m")
-        print("..done.")
-
-        # Find overlapping time stamps
-        t_era_full = date2num(era5.time.data)
-        # Start and end points of sig500 deployment
-        tind0_era = np.searchsorted(t_era_full, dx.time[0]) - 2
-        tind1_era = np.searchsorted(t_era_full, dx.time[-1]) + 2
-        tsl_era = slice(tind0_era, tind1_era)

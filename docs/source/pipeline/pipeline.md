@@ -32,6 +32,8 @@ ___
 - Renames variables and appends relevant metadata.
 - Regrids from `Average_TIME` to 2D (`TIME`, `SAMPLE`):
 
+
+
  <a href="../_static/proc_images/kobbe_1d_to_2d.png" target="_blank">
     <img src="../_static/proc_images/kobbe_1d_to_2d.png" width="250" height="100" alt="SIC Spectra">
   </a>
@@ -47,18 +49,32 @@ ___
 <summary><b>3. Estimate sea ice presence from Figure-of-Merit</b> <i>(automatic within #2)</i></summary>
 <p>
 
-- Currently in `kobbe.load.matfiles_to_dataset()`
-    - Calls `kobbe.append._add_SIC_FOM`
-    - (Should probably force an explicit call for this?)
+Currently in `kobbe.load.matfiles_to_dataset()` (calls `kobbe.append._add_SIC_FOM`).
 
-<div style="display: flex; justify-content: space-between;">
+- Use the Figure-of-Merit quality metric from the slanted beams to determine whether there is sea ice
   <a href="../_static/proc_images/FOM.png" target="_blank">
     <img src="../_static/proc_images/FOM.png" width="250" height="100" alt="FOM">
   </a>
+
+- Using a FOM threshold of 1000 to classify "good"/"bad".
+- Using FOM for all beams to get:
+    - `ICE_IN_SAMPLE` (FOM < 10000 for all 4 beams)
+    - `ICE_IN_SAMPLE_ANY` (FOM < 10000 for any of the 4 beams)
+
+
+
+
+Calculating a "sea ice concentration" from `ICE_IN_SAMPLE` gives a fairly good match with remote sensing:
+
+<a href="../_static/proc_images/sic_fom_comparison.png"  target="_blank">
+    <img src="../_static/proc_images/sic_fom_comparison.png" width="600" height="120" alt="Example of distribution of LE and AST distances">
+</a>
+
+Seems to be good agreement with spectra from open water vs ice:
+
   <a href="../_static/proc_images/SIC_spectra.png" target="_blank">
     <img src="../_static/proc_images/SIC_spectra.png" width="250" height="100" alt="SIC Spectra">
   </a>
-</div>
 </p>
 </details>
 
@@ -131,7 +147,9 @@ A quality parameter `Average_AltimeterQualityLE/AST` is associated with each `Av
 
 The vertical position $z_S$ of the scattering surface relative to the sea surface (positive downward) is computed from $S_v$: and depth $D$:
 
-> $z_S = D - S_v$
+> $z_S = D - S_v - \alpha_{OW}$
+
+Where $\alpha_{OW}$ is an empirically determined fixed offset, initially set to zero.
 
 $z_S$ (stored in the variables `SURFACE_DEPTH_LE/AST`) includes measurements of:
 
@@ -181,48 +199,28 @@ in datasets from Sig500s mounted near 20 m depth in th northwestern Barents Sea,
 ___
 
 <details>
-<summary><b>8. Get time-varying open water sound speed correction</b></summary>
+<summary><b>8. Get open water corrections</b></summary>
 <p>
 
-**Sources of error** include:
+We want to find one or both coefficients $\alpha_{OW}, \beta_{OW}$ to correct the altimeter distance so that the **mean value of open-water measurements is near zero**.
 
-- Erroneous effective sound speed along the acoustic travel path because T and S above the sensor may be *lower* than measured at the Sig500.
+1. The "open water surface depth" $\eta$ is found ($\eta=D - S_v$ for samples classified as *open water*).
+2. A low-passed filtered (default: daily) time series of $\eta$ ($\eta_{LP}$) is produced by:
+    - Filtering out outliers (reject outliers > 15 cm from deployment median)
+    - Computing ensemble medians
+    - Computing daily means from these, only including days with >2.5% open water ensembles.
+    - Linearly interpolate to get a continuous daily time series.
+    - (Smoothe with a running mean if we want to use a coarser time scale.)
+3. The fixed offset correction $\alpha_{OW}$ is taken as the mean of $\eta_{LP}$.
+4. The time-varying factor correction $\beta_{OW}$ is calculated so that the low-pass filtered open water surface (after applying $\alpha_{OW}$) is zero:
 
-    - *Example*:
-    - Meltwater layer above the sensor where T, S is lower
-    - -> True sound speed is lower than estimated.
-    - -> True travel distance is shorter than estimated.
-    - -> True ice draft is deeper than estimated.
-    - **NOTE: Doe BOE calculation here!!**
+> $\beta_{OW} = (D_{LP} - \alpha_{OW}) / (D_{LP} - \eta_{LP})$
 
-- Erroneous instrument pressure
-    - From [specs](https://www.nortekgroup.com/products/signature-500/pdf): Error is 0.1% of full scale
-    - At 20 dbar, this should give an error of ~2 cm. This could give an error up to 4 cm in the travel distance.
+..which is equivalent to the following holding over the LP time scale:
 
-- Erroneous atmospheric pressure
-    - Could be errors, but we don't expect a *bias* in one direction or another..
-    - A 30hPa error (equivalent to the atmo pressure being *totally* wrong) could give an error of 30 cm.
-
-- Erroneous *g*
+>$\beta_{OW} S_v + \alpha_{OW} = D$
 
 
-- Erroneous instrument tilt
-    - From [specs](https://www.nortekgroup.com/products/signature-500/pdf): Error is 2 degrees
-    - The associated error in the cos term should be            negligible  (~0.06%)
-
-- Refectors before the surface?
-
-    - Bubbles or similar..
-    - Algorithm setting distance *at* point rather than in between
-
-
-
-
-`use-alpha = True`??
-
-- `kobbe.icedraft.get_Beta_from_OWSD()`
-- USING A LONG-TIME AVERAGE OFFSET..
-- SHOULD MAYBE BE fixed offset plus beta??
 </p>
 </details>
 
@@ -230,13 +228,16 @@ ___
 ___
 
 <details>
-<summary><b>9. Recalculate sea ice draft, now using OW correction
+<summary><b>9. Recalculate sea ice draft, now using open water correction
 </b></summary>
 <p>
 
 - `kobbe.icedraft.calculate_draft()`
-- FORMULA!
-- -> Should be done with ice draft here!
+- Recalculate sea ice draft with the same formula as before, but now using the
+  empirically derived values for $\alpha_{OW}, \beta_{OW}$:
+
+> $z_S = D -$ `Average_AltimeterDistance`$
+\cdot \cos \theta \cdot c_{S, OBS}$/`Average_Soundspeed`$\cdot \beta_{OW}- \alpha_{OW}$
 
 </p>
 </details>
@@ -340,7 +341,42 @@ ___
 - Where is the filtering LE by LE-AST distance?
 ___
 
-### Q Nortek:
+### Sources of error
+
+
+
+**Sources of error** include:
+
+- Erroneous effective sound speed along the acoustic travel path because T and S above the sensor may be *lower* than measured at the Sig500.
+
+    - *Example*:
+    - Meltwater layer above the sensor where T, S is lower
+    - -> True sound speed is lower than estimated.
+    - -> True travel distance is shorter than estimated.
+    - -> True ice draft is deeper than estimated.
+    - **NOTE: Doe BOE calculation here!!**
+
+- Erroneous instrument pressure
+    - From [specs](https://www.nortekgroup.com/products/signature-500/pdf): Error is 0.1% of full scale
+    - At 20 dbar, this should give an error of ~2 cm. This could give an error up to 4 cm in the travel distance.
+
+- Erroneous atmospheric pressure
+    - Could be errors, but we don't expect a *bias* in one direction or another..
+    - A 30hPa error (equivalent to the atmo pressure being *totally* wrong) could give an error of 30 cm.
+
+- Erroneous *g*
+
+
+- Erroneous instrument tilt
+    - From [specs](https://www.nortekgroup.com/products/signature-500/pdf): Error is 2 degrees
+    - The associated error in the cos term should be            negligible  (~0.06%)
+
+- Refectors before the surface?
+
+    - Bubbles or similar..
+    - Algorithm setting distance *at* point rather than in between
+
+
 
 ___
 

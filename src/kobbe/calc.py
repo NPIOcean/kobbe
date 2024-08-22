@@ -61,7 +61,8 @@ def dep_from_p(DX, corr_atmo=True, corr_CTD_density=True):
                 ).upper()
 
             if user_input_abort == "A":
-                raise Exception("ABORTED BY USER (MISSING ATMOSPHERIC PRESSURE)")
+                raise Exception(
+                    "ABORTED BY USER (MISSING ATMOSPHERIC PRESSURE)")
 
         else:
             user_input_abort = "C"
@@ -75,7 +76,7 @@ def dep_from_p(DX, corr_atmo=True, corr_CTD_density=True):
         )
 
     # CALCULATE GRAVITATIONAL ACCELERATION
-    if DX.lat == None:
+    if DX.lat is None:
         raise Exception(
             'No "lat" field in the dataset. Add one using'
             " sig_append.set_lat() and try again."
@@ -83,12 +84,10 @@ def dep_from_p(DX, corr_atmo=True, corr_CTD_density=True):
 
     g = gsw.grav(DX.lat.data, 0)
     DX["g"] = (
-        (),
-        g,
-        {
-            "units": "ms-2",
-            "note": "Calculated using gsw.grav() for p=0 and lat=%.2f" % DX.lat,
-        },
+        (), g,
+        {"units": "ms-2",
+         "note": f"Calculated using gsw.grav() for p=0 and lat={DX.lat:.2f}",
+         },
     )
     note_str += "\n- Using g=%.4f ms-2 (calculated using gsw.grav())" % g
 
@@ -101,7 +100,8 @@ def dep_from_p(DX, corr_atmo=True, corr_CTD_density=True):
         if corr_CTD_density:
             print("\nNo density (*rho_ocean*) field found. ")
             user_input_abort_dense = input(
-                'Enter "A" (Abort) or "C" ' "(Continue using fixed rho = 1027 kg m-3): "
+                'Enter "A" (Abort) or "C" '
+                "(Continue using fixed rho = 1027 kg m-3): "
             ).upper()
 
             while user_input_abort_dense not in ["A", "C"]:
@@ -119,7 +119,8 @@ def dep_from_p(DX, corr_atmo=True, corr_CTD_density=True):
         ).upper()
         while rho_input not in ["R", "S"]:
             print('Input ("%s") not recognized.' % rho_input)
-            rho_input = input('Enter "R" (fixed rho = 1027) or "S" (specify): ').upper()
+            rho_input = input(
+                'Enter "R" (fixed rho = 1027) or "S" (specify): ').upper()
 
         if rho_input == "R":
             rho_ocean = 1027
@@ -204,8 +205,7 @@ def daily_average(A, t, td=None, axis=-1, min_frac=0, function="median"):
     for nn in np.arange(Nt):
         tind = tfl == td[nn]
         if tind.any():
-            #   print( (sum(np.isnan(A[..., tind]))/len(A[..., tind])).data,
-            #        (sum(np.isnan(A[..., tind]))/len(A[..., tind])).data<1-min_frac)
+
             if sum(np.isnan(A[..., tind])) / len(A[..., tind]) < 1 - min_frac:
                 with (
                     warnings.catch_warnings()
@@ -271,7 +271,6 @@ def runningstat(A, window_size):
 
     return RS
 
-
 #####
 
 
@@ -284,5 +283,6 @@ def clean_nanmedian(a, **kwargs):
     all-NaN slices)
     """
     with warnings.catch_warnings():
-        warnings.filterwarnings(action="ignore", message="All-NaN slice encountered")
+        warnings.filterwarnings(action="ignore",
+                                message="All-NaN slice encountered")
         return np.nanmedian(a, **kwargs)
