@@ -28,12 +28,14 @@ from kobbe.calc import mat_to_py_time
 from kobbe.append import _add_tilt, _add_SIC_FOM, set_lat, set_lon
 from datetime import datetime
 import warnings
-from typing import List, Optional, Tuple
+import os
+import glob2
+from typing import List, Optional, Tuple, Union
 
 ##############################################################################
 
 def matfiles_to_dataset(
-    file_list: List[str],
+    file_input: Union[List[str], str],
     reshape: bool = True,
     lat: Optional[float] = None,
     lon: Optional[float] = None,
@@ -46,8 +48,8 @@ def matfiles_to_dataset(
 
     Parameters
     ----------
-    file_list : List[str]
-        List of file paths to .mat files.
+    file_input : Union[List[str], str]
+        List of file paths to .mat files, or a directory containing .mat files.
     reshape : bool, optional
         If True, reshape all time series from a single 'time_average' dimension
         to 2D ('TIME', 'SAMPLE') where TIME is the mean time of each ensemble
@@ -73,7 +75,7 @@ def matfiles_to_dataset(
     Raises
     ------
     ValueError
-        If file_list is empty or if there's a problem during concatenation.
+        If file_input is empty or if there's a problem during concatenation.
 
     Notes
     -----
@@ -82,6 +84,18 @@ def matfiles_to_dataset(
     `_reshape_ensembles`, `set_lat`, `set_lon`, and `_add_SIC_FOM` functions.
     Ensure that these functions are correctly implemented and available in the scope.
     """
+
+    # Convert directory input to a list of .mat files
+    if isinstance(file_input, str) and os.path.isdir(file_input):
+        file_list = glob2.glob(os.path.join(file_input, '*.mat'))
+    elif isinstance(file_input, list):
+        file_list = file_input
+    else:
+        raise ValueError("file_input must be a list of file paths or a directory containing .mat files.")
+
+    if len(file_list) == 0:
+        raise ValueError('The file list is empty. No .mat files found.')
+
 
     # Get max/min times:
     date_fmt = '%d.%m.%Y'
@@ -167,7 +181,7 @@ def matfiles_to_dataset(
         '- Loaded from .mat files on'
         ' %s' % datetime.now().strftime("%d %b %Y."))
 
-    print('Done. Run matfiles_to_dataset() to print some additional details.')
+    print('Done. Run kobbe.load.overview()) to print some additional details.')
 
     return ds
 
@@ -238,9 +252,8 @@ def chop(ds, indices = None, auto_accept = False):
     ds.attrs['history'] += '\n- %s'%net_str
     return ds
 
-
-
 ##############################################################################
+
 
 def overview(ds):
     '''
@@ -274,6 +287,7 @@ def overview(ds):
     print('Ocean velocity bins: %i.'%(ds.sizes['BINS']))
 
 ##############################################################################
+
 
 def _reshape_ensembles(ds):
     '''
@@ -311,7 +325,6 @@ def _reshape_ensembles(ds):
 
     print('%i time points, %i ensembles. Sample per ensemble: %i'%(
          Nt, Nens, Nsamp_per_ens))
-
 
     # NSW XARRAY DATASET
 

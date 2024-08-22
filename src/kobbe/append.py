@@ -24,39 +24,64 @@ from scipy.interpolate import interp1d
 import gsw
 from kobbe.calc import mat_to_py_time
 from matplotlib.dates import date2num, num2date
+import pandas as pd
+from typing import Optional, Union, List, Dict, Any
 
-
-def add_to_sigdata(ds, data, time, name, attrs = None, time_mat = False,
-                   extrapolate = False):
-    '''
-    Adds a time series to the Signature dataset. Interpolates onto the "time"
+def add_to_sigdata(
+    ds: xr.Dataset,
+    data: Union[np.ndarray, List[float]],
+    time: Union[np.ndarray, List[Union[str, np.datetime64, float]]],
+    name: str,
+    attrs: Optional[Dict[str, Any]] = None,
+    time_mat: bool = False,
+    extrapolate: bool = False
+) -> xr.Dataset:
+    """
+    Adds a time series to the Signature dataset. Interpolates onto the "TIME"
     coordinate (one entry per ensemble).
 
-    Used in the functions append_ctd() and append_slp(), but can also be
-    useful for appending e.g. remote sensing sea ice data for
-    comparison/validation.
+    This function can be used to append time series data, such as remote
+    sensing data, to an existing xarray dataset for comparison or validation.
 
-    Inputs
-    ------
-    ds: xarray dataset with signature data.
-    data: Time series data
-    time: Time grid of data (python epoch unless time_mat = True)
-    name: Name of the new variable (string)
-    attrs: Attributes of the new variable (dictionary). Good place to
-           include "units", "long_name", etc..
-    time_mat: Set to True if *time* is matlab epoch
-              (False/default: python default epoch)
-    extrapolate: If set to true, values will be extrapolated (linearly)
-                 outside the ragne of the input data.
+    Parameters
+    ----------
+    ds : xr.Dataset
+        The xarray dataset with signature data.
+    data : Union[np.ndarray, List[float]]
+        The time series data to be added.
+    time : Union[np.ndarray, List[Union[str, np.datetime64, float]]]
+        The time grid of the data. This can be in datetime64 format, as strings
+        (e.g., ['2022-05-21']), or as numeric values (e.g., Python epoch time
+        or Matlab timestamp).
+    name : str
+        The name of the new variable to be added to the dataset.
+    attrs : Optional[Dict[str, Any]], optional
+        Attributes of the new variable, such as units and long_name, by default None.
+    time_mat : bool, optional
+        Set to True if `time` is provided in MATLAB epoch format. If False (default),
+        the time is assumed to be in Python default epoch or standard datetime format.
+    extrapolate : bool, optional
+        If True, values will be linearly extrapolated outside the range of the input
+        data. By default, extrapolate is set to False.
 
-    Outputs
+    Returns
     -------
-    ds: The xarray dataset including the new variable.
-
-    '''
+    xr.Dataset
+        The xarray dataset including the new variable.
+    """
 
     if time_mat:
         time = mat_to_py_time(time)
+
+
+    # Handle string-based time input
+    if isinstance(time, (list, np.ndarray)) and isinstance(time[0], str):
+        time = np.array(pd.to_datetime(time))
+
+    # Check if time is in datetime64 format and convert to numeric
+    # (float) if necessary
+    if np.issubdtype(time.dtype, np.datetime64):
+        time = date2num(time)
 
     tfmt = '%d %b %Y'
     tstrs_ds = (num2date(ds.TIME[0]).strftime(tfmt),

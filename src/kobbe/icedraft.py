@@ -13,7 +13,8 @@ from kobbe import append
 
 def calculate_draft(
     ds, corr_sound_speed_CTD=True, qual_thr=8000,
-    LE_AST_max_sep=0.5
+    LE_AST_max_sep=0.5,
+    minimum_draft = -0.5,
 ):
     """
     Calculate ice draft.
@@ -70,7 +71,7 @@ def calculate_draft(
         )
 
         ds["SEA_ICE_DRAFT_%s" % le_ast] = ds["SEA_ICE_DRAFT_%s" % le_ast].where(
-            ds["SEA_ICE_DRAFT_%s" % le_ast] > -0.3
+            ds["SEA_ICE_DRAFT_%s" % le_ast] >= minimum_draft
         )
 
         ds["SEA_ICE_DRAFT_MEDIAN_%s" % le_ast] = (
@@ -86,7 +87,7 @@ def calculate_draft(
 
         ds["SEA_ICE_DRAFT_MEDIAN_%s" % le_ast] = ds[
             "SEA_ICE_DRAFT_MEDIAN_%s" % le_ast
-        ].where(ds["SEA_ICE_DRAFT_MEDIAN_%s" % le_ast] > -0.3)
+        ].where(ds["SEA_ICE_DRAFT_MEDIAN_%s" % le_ast] >= minimum_draft)
 
     return ds
 
@@ -181,21 +182,21 @@ def calculate_surface_position(
         beta_mean, beta_max, beta_min = 'N/A', 'N/A', 'N/A'
     # Calculate the surface position (depth of the scattering surface detected
     # by LE or AST algorithm below the water surface)
-    surface_position = ds.depth - (
-        (ds[alt_dist_attr] + alpha)
+    surface_position = (
+        ds.depth
+        - ds[alt_dist_attr]
         * tilt_factor
         * sound_speed_ratio_obs_nom
         * beta
+        - alpha
     )
 
-    # Apply a quuality threshold criterion (from the Average_AltimeterQuality
+    # Apply a quality threshold criterion (from the Average_AltimeterQuality
     # variable)
     surface_position = surface_position.where(ds[alt_qual_attr] > qual_thr)
     note_str += (
         "\n- Samples where %s>%i" % (alt_qual_attr, qual_thr) + " were discarded."
     )
-
-    print(beta_mean, 'beta_mean')
 
     # STORE AS VARIABLE
     ds["SURFACE_DEPTH_%s" % le_ast] = (
@@ -289,8 +290,10 @@ def get_open_water_surface_depth_LP(
     RS = runningstat(Ad_interp, run_window_days)
 
     # Export filtered, ensemble median, daily averaged, smoothed daily OWSD.
-    # Also daily time array (td+0.5) of teh midpoint of the daily estimates.
+    # Also daily time array (td+0.5) of the midpoint of the daily estimates.
     return RS["mean"], td + 0.5
+
+###########
 
 
 def get_open_water_correction(
@@ -312,11 +315,13 @@ def get_open_water_correction(
         ow_surface_depth_full_LE,
         thr_reject_from_net_median=thr_reject_from_net_median,
         min_frac_daily=min_frac_daily,
+        run_window_days=run_window_days
     )
     ow_surface_depth_LP_AST, td = get_open_water_surface_depth_LP(
         ow_surface_depth_full_AST,
         thr_reject_from_net_median=thr_reject_from_net_median,
         min_frac_daily=min_frac_daily,
+        run_window_days=run_window_days
     )
 
     # Obtain daily, smoothed instrument depths
@@ -336,8 +341,10 @@ def get_open_water_correction(
 
     # Obtain BETA (time-varying sound speed correction)
     if ss_factor:
-        beta_LE = depth_lp / (depth_lp - (ow_surface_depth_LP_LE - alpha_LE))
-        beta_AST = depth_lp / (depth_lp - (ow_surface_depth_LP_AST - alpha_AST))
+        beta_LE = ((depth_lp - alpha_LE)
+                   / (depth_lp - ow_surface_depth_LP_LE))
+        beta_AST = ((depth_lp - alpha_AST)
+                    / (depth_lp - ow_surface_depth_LP_AST))
     else:
         beta_LE, beta_AST = np.ones(len(td)), np.ones(len(td))
 
@@ -365,7 +372,7 @@ def get_open_water_correction(
     return ds
 
 
-def compare_OW_correction(ds, show_plots=True):
+def compare_open_water_correction(ds, show_plots=True):
     """
     Note: Run this *after* running *get_Beta_from_OWSD* but *before*
     running *kobbe.icedraft.calculate_draft()* again.
@@ -424,29 +431,35 @@ def compare_OW_correction(ds, show_plots=True):
 
         ax[0].plot_date(ds2.TIME,
                         ds.ow_surface_before_correction_LE,
-                        "-", label="LE", color='tab:blue')
+                        ".", label="LE", color='tab:blue')
         ax[0].plot_date(ds2.TIME,
-                        ds.ow_surface_before_correction_LE-ds.alpha_LE,
-                        "--", label="LE (after fixed offset)",
+                        ds.ow_surface_before_correction_LE_LP,
+                        "-", label="LE (LP filtered)",
                         color='tab:blue')
+        ax[0].axhline(ds.alpha_LE, ls = ':', color='tab:blue', label='LE Fixed offset $\\alpha$')
+
         ax[0].plot_date(ds2.TIME,
                         ds.ow_surface_before_correction_AST,
-                        "-", label="AST", color='tab:orange')
+                        ".", label="AST", color='tab:orange')
         ax[0].plot_date(ds2.TIME,
-                        ds.ow_surface_before_correction_AST-ds.alpha_AST,
-                        "--", label="AST (after fixed, offset)",
+                        ds.ow_surface_before_correction_AST_LP,
+                        "-", label="AST (LP filtered)",
                         color='tab:orange')
+
+        ax[0].axhline(ds.alpha_AST, ls = ':', color='tab:orange', label='AST Fixed offset $\\alpha$')
+
         ax[1].plot_date(ds2.TIME, ds.beta_LE, "-", label="LE")
         ax[1].plot_date(ds2.TIME, ds.beta_AST, "-", label="AST")
 
         for axn in ax:
-            axn.legend()
+            axn.legend(ncol = 2)
             axn.grid()
         labfs = 9
         ax[0].set_ylabel("Estimated open water\nsurface depth [m]",
                          fontsize=labfs)
-        ax[1].set_ylabel("beta (open water altimeter distance"
+        ax[1].set_ylabel("$\\beta$ (open water altimeter \ndistance"
                          " correction factor)", fontsize=labfs)
+        ax[0].set_ylim(1, -0.4)
 
         #
 
@@ -456,8 +469,8 @@ def compare_OW_correction(ds, show_plots=True):
             ds0.SURFACE_DEPTH_LE,
             marker=".",
             color="k",
-            alpha=0.05,
-            s=0.3,
+            alpha=0.2,
+            s=2,
             label="Uncorrected",
         )
         ax[0].scatter(
@@ -465,8 +478,8 @@ def compare_OW_correction(ds, show_plots=True):
             ds2.SURFACE_DEPTH_LE,
             marker=".",
             color="r",
-            alpha=0.05,
-            s=0.3,
+            alpha=0.2,
+            s=2,
             label="Corrected",
         )
 
@@ -475,8 +488,8 @@ def compare_OW_correction(ds, show_plots=True):
             ds0.SEA_ICE_DRAFT_MEDIAN_LE,
             marker=".",
             color="k",
-            alpha=0.05,
-            s=0.3,
+            alpha=0.3,
+            s=2,
             label="Uncorrected",
         )
         ax[1].scatter(
@@ -484,8 +497,8 @@ def compare_OW_correction(ds, show_plots=True):
             ds2.SEA_ICE_DRAFT_MEDIAN_LE,
             marker=".",
             color="r",
-            alpha=0.05,
-            s=0.3,
+            alpha=0.3,
+            s=2,
             label="Corrected",
         )
         ax[0].set_title("LE Surface depth (ALL)")
@@ -504,4 +517,5 @@ def compare_OW_correction(ds, show_plots=True):
         ax[0].plot_date(ds.time_average[0, 0], ds2.SURFACE_DEPTH_LE[0, 0])
 
         ax[0].invert_yaxis()
+
         plt.show()
