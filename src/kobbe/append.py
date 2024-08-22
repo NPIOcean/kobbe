@@ -37,7 +37,7 @@ import numpy as np
 import xarray as xr
 from scipy.interpolate import interp1d
 import gsw
-from kobbe.calc import mat_to_py_time
+from kval.util.time import matlab_time_to_python_time
 from matplotlib.dates import date2num
 import pandas as pd
 from typing import Optional, Union, List, Dict, Any
@@ -90,7 +90,7 @@ def add_to_sigdata(
     """
 
     if time_mat:
-        time = mat_to_py_time(time)
+        time = matlab_time_to_python_time(time)
 
     # Convert time to a NumPy array if it is not already one
     time = np.asarray(time)
@@ -111,7 +111,7 @@ def add_to_sigdata(
     # Interpolatant of the time series
     data_ip = interp1d(time, data, **interp1d_kws)
 
-    # Add interpolated data to dx
+    # Add interpolated data to ds
     ds[name] = (("TIME"), data_ip(ds.TIME.data), attrs)
 
     return ds
@@ -278,7 +278,7 @@ def append_atm_pres(
 
 
 def append_magdec(
-    dx: xr.Dataset,
+    ds: xr.Dataset,
     magdec: Union[float, np.ndarray],
     magdectime: Optional[np.ndarray] = None,
     attrs: Optional[Dict[str, Any]] = None,
@@ -300,7 +300,7 @@ def append_magdec(
 
     Parameters
     ----------
-    dx : xr.Dataset
+    ds : xr.Dataset
         The xarray Dataset containing signature data to which the magnetic
         declination will be added.
     magdec : Union[float, np.ndarray]
@@ -338,8 +338,8 @@ def append_magdec(
                 "Looks like you supplied a time-varying `magdec` but did not "
                 "provide the required timestamps `magdectime`."
             )
-        dx = add_to_sigdata(
-            dx,
+        ds = add_to_sigdata(
+            ds,
             magdec,
             magdectime,
             "magdec",
@@ -348,18 +348,18 @@ def append_magdec(
             extrapolate=extrapolate,
         )
     else:  # If magdec is a single value
-        dx["magdec"] = ((), magdec, attrs_all)
+        ds["magdec"] = ((), magdec, attrs_all)
 
-    return dx
+    return ds
 
 
-def set_lat(dx: xr.Dataset, lat: float) -> xr.Dataset:
+def set_lat(ds: xr.Dataset, lat: float) -> xr.Dataset:
     """
     Append a single latitude value to a Signature xarray Dataset.
 
     Parameters
     ----------
-    dx : xr.Dataset
+    ds : xr.Dataset
         The xarray Dataset to which the latitude will be added.
     lat : float
         Latitude in degrees north.
@@ -369,17 +369,17 @@ def set_lat(dx: xr.Dataset, lat: float) -> xr.Dataset:
     xr.Dataset
         The xarray Dataset with the added latitude variable (`lat`).
     """
-    dx["lat"] = ((), lat, {"long_name": "Latitude", "units": "degrees_north"})
-    return dx
+    ds["lat"] = ((), lat, {"long_name": "Latitude", "units": "degrees_north"})
+    return ds
 
 
-def set_lon(dx: xr.Dataset, lon: float) -> xr.Dataset:
+def set_lon(ds: xr.Dataset, lon: float) -> xr.Dataset:
     """
     Append a single longitude value to a Signature xarray Dataset.
 
     Parameters
     ----------
-    dx : xr.Dataset
+    ds : xr.Dataset
         The xarray Dataset to which the longitude will be added.
     lon : float
         Longitude in degrees east.
@@ -389,8 +389,8 @@ def set_lon(dx: xr.Dataset, lon: float) -> xr.Dataset:
     xr.Dataset
         The xarray Dataset with the added longitude variable (`lon`).
     """
-    dx["lon"] = ((), lon, {"long_name": "Longitude", "units": "degrees_east"})
-    return dx
+    ds["lon"] = ((), lon, {"long_name": "Longitude", "units": "degrees_east"})
+    return ds
 
 ##############################################################################
 

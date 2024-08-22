@@ -1,48 +1,81 @@
+from typing import Optional, Tuple
 import numpy as np
 import matplotlib.pyplot as plt
+from kval.ocean import uv
+import xarray as xr
 
 
-def plot_ellipse_icevel(DX, lp_days=5, ax=None, return_ax=True):
+def plot_ellipse_icevel(
+    ds,
+    lp_days: int = 5,
+    ax: Optional[plt.Axes] = None,
+    return_ax: bool = True
+) -> Optional[plt.Axes]:
     """
-    Plot of u and v ice drift components
-    low pass filtered with a running mean of *lp_days*.
+    Plot of ice drift components (u and v) low pass filtered with a running
+    mean of *lp_days*.
 
-    Showing the mean current vector, the low-pass-filtered
-    and subsampled currents, and the semi-major and -minor axes
-    of the variance ellipse.
+    Showing the mean current vector, the low-pass-filtered and subsampled
+    currents, and the semi-major and -minor axes of the variance ellipse. Args:
+        ds: xarray.Dataset
+            The dataset containing ice drift data, specifically "Uice" and
+            "Vice" fields.
+        lp_days (int, optional):
+            The number of days over which to apply the low-pass filter. Default
+            is 5 days.
+        ax (matplotlib.axes.Axes, optional):
+            An existing matplotlib Axes to plot on. If None, a new figure and
+            axes are created.
+        return_ax (bool, optional):
+            If True, returns the matplotlib Axes object used for the plot.
+            Default is True.
+
+    Returns:
+        Optional[plt.Axes]: The Axes object containing the plot if `return_ax`
+        is True, otherwise None.
+
+    Raises:
+        AssertionError: If the dataset does not have the required "Uice" field.
+
+    Example:
+        >>> ds = xr.Dataset({"Uice": ..., "Vice": ...})
+        >>> plot_ellipse_icevel(ds, lp_days=3)
     """
-    assert hasattr(DX, "Uice"), 'No "Uice" field. Run sig_ice_vel.calculate_drift()..'
+
+    assert hasattr(ds, "Uice"), ('No "Uice" field. Run '
+                                 'vel.calculate_drift()..')
 
     print("ELLIPSE PLOT: Interpolate over nans.. \r", end="")
 
-    uip = DX.Uice.interpolate_na(dim="TIME", limit=10).data
-    vip = DX.Vice.interpolate_na(dim="TIME", limit=10).data
+    uip = ds.Uice.interpolate_na(dim="TIME", limit=10).data
+    vip = ds.Vice.interpolate_na(dim="TIME", limit=10).data
 
     print("ELLIPSE PLOT: Low pass filtering..    \r", end="")
     # LPFed
-    wlen = int(np.round(lp_days / (DX.sampling_interval_sec / 60 / 60 / 24)))
+    wlen = int(np.round(lp_days / (ds.sampling_interval_sec / 60 / 60 / 24)))
     ULP = np.convolve(uip, np.ones(wlen) / wlen, mode="valid")[::wlen]
     VLP = np.convolve(vip, np.ones(wlen) / wlen, mode="valid")[::wlen]
 
     print("ELLIPSE PLOT: Calculating ellipse (from LPed data).. \r", end="")
 
     # Ellipse
-    thp, majax, minax = _uv_angle(ULP - np.nanmean(ULP), VLP - np.nanmean(VLP))
+    thp, majax, minax = uv.principal_angle(
+        ULP - np.nanmean(ULP), VLP - np.nanmean(VLP))
 
     # Mean
     UM, VM = np.nanmean(ULP), np.nanmean(VLP)
 
     print("ELLIPSE PLOT: Plotting..                              \r", end="")
 
-    if ax == None:
+    if ax is None:
         fig, ax = plt.subplots(figsize=(10, 10))
 
     ax.set_aspect("equal")
 
     ax.plot(uip, vip, ".", ms=1, color="Grey", alpha=0.3, lw=2, zorder=0)
     ax.plot(
-        DX.Uice.data[-1],
-        DX.Vice.data[-1],
+        ds.Uice.data[-1],
+        ds.Vice.data[-1],
         ".",
         ms=1,
         color="k",
@@ -65,8 +98,10 @@ def plot_ellipse_icevel(DX, lp_days=5, ax=None, return_ax=True):
 
     vmaj = np.array([-majax * np.sin(thp), majax * np.sin(thp)])
     umaj = np.array([-majax * np.cos(thp), majax * np.cos(thp)])
-    vmin = np.array([-minax * np.sin(thp + np.pi / 2), minax * np.sin(thp + np.pi / 2)])
-    umin = np.array([-minax * np.cos(thp + np.pi / 2), minax * np.cos(thp + np.pi / 2)])
+    vmin = np.array([-minax * np.sin(thp + np.pi / 2),
+                     minax * np.sin(thp + np.pi / 2)])
+    umin = np.array([-minax * np.cos(thp + np.pi / 2),
+                     minax * np.cos(thp + np.pi / 2)])
 
     ax.plot(UM + umaj, VM + vmaj, "-k", lw=2, label="Maj axis")
     ax.plot(UM + umin, VM + vmin, "--k", lw=2, label="Min axis")
@@ -83,7 +118,7 @@ def plot_ellipse_icevel(DX, lp_days=5, ax=None, return_ax=True):
         headlength=2,
         headaxislength=2,
         alpha=0.6,
-        label="Mean (u: %.2f, v: %.2f)" % (UM, VM),
+        label=f"Mean (u: {UM:.2f}, v: {VM:.2f})",
         edgecolor="k",
         linewidth=0.6,
     )
@@ -100,12 +135,50 @@ def plot_ellipse_icevel(DX, lp_days=5, ax=None, return_ax=True):
         return ax
 
 
-def histogram(DX, varnm, hrange=None, nbins=50, return_figure=False):
+def histogram(
+    ds: xr.Dataset,
+    varnm: str,
+    hrange: Optional[Tuple[float, float]] = None,
+    nbins: int = 50,
+    return_figure: bool = False
+) -> Optional[plt.Figure]:
+    """
+    Plot a histogram showing the distribution of a variable (1D or 2D) in a
+    Signature dataset, with optional statistical summary.
+
+    This function generates a histogram for a specified variable in an xarray
+    Dataset. It also displays quick statistics about the distribution,
+    including mean, median, min, max, and standard deviation.
+
+    Args:
+        ds (xr.Dataset):
+            The xarray Dataset containing the variable of interest.
+        varnm (str):
+            The name of the variable in the Dataset to plot.
+        hrange (Optional[Tuple[float, float]], optional):
+            The range of values to include in the histogram. If None, the range
+            is determined from the data. Default is None.
+        nbins (int, optional):
+            The number of bins for the histogram. Default is 50.
+        return_figure (bool, optional):
+            If True, the function returns the matplotlib Figure object. Default
+            is False.
+
+    Returns:
+        Optional[plt.Figure]:
+            The matplotlib Figure object if `return_figure` is True, otherwise
+            None.
+
+    Example:
+        >>> ds = xr.Dataset({"temperature": (["time"], np.random.randn(1000))})
+        >>> histogram(ds, "temperature", nbins=30)
+    """
+
     """
     Histogram showing the distribution of a variable - 1D or 2D.
 
-    DXX xarray object with signature data
-    varnm: Name of the variable in DX
+    ds: xarray object with signature data
+    varnm: Name of the variable in ds
     hrange: Max range for the histogram
     nbins: Number of histogram bins
     return_figure: True for returning the figrue object.
@@ -114,11 +187,10 @@ def histogram(DX, varnm, hrange=None, nbins=50, return_figure=False):
     ax = plt.subplot2grid((2, 5), (0, 0), colspan=5)
     textax = plt.subplot2grid((2, 5), (1, 0), colspan=3)
 
-    VAR_all = DX[varnm].data[~np.isnan(DX[varnm].data)]
+    VAR_all = ds[varnm].data[~np.isnan(ds[varnm].data)]
 
     N_all = len(VAR_all)
     col_1 = (1.0, 0.498, 0.055)
-    col_2 = (0.122, 0.467, 0.705)
 
     # Histogram, all entries
     Hargs = {"density": False, "range": hrange, "bins": nbins}
@@ -148,32 +220,33 @@ def histogram(DX, varnm, hrange=None, nbins=50, return_figure=False):
     # x label: Long description
     ax.set_ylabel("Density per bin [%]")
     twax.set_ylabel("Cumulative density [%]")
-    if "units" in DX[varnm].attrs.keys():
-        unit = DX[varnm].attrs["units"]
+    if "units" in ds[varnm].attrs.keys():
+        unit = ds[varnm].attrs["units"]
     else:
         unit = ""
 
     ax.set_xlabel(unit)
 
-    attrtext = "ATTRIBUTES\n------------------\n"
-    attrtext += "DIMENSIONS: %s" % str(DX[varnm].sizes)
-    for attrnm in DX[varnm].attrs.keys():
-        # if len(DX[varnm].attrs[attrnm])>60:
-        #   note DX.tilt_Average.attrs['note'][:60]
-        attrtext += "\n%s: %s" % (attrnm.upper(), DX[varnm].attrs[attrnm])
+    attr_text = "ATTRIBUTES\n------------------\n"
+    attr_text += "DIMENSIONS: %s" % str(ds[varnm].sizes)
+    for attrnm in ds[varnm].attrs.keys():
+        # if len(ds[varnm].attrs[attrnm])>60:
+        #   note ds.tilt_Average.attrs['note'][:60]
+        attr_text += "\n%s: %s" % (attrnm.upper(), ds[varnm].attrs[attrnm])
 
-    stattext = "\n\nQUICK STATS\n------------------"
-    stattext += "\nTOTAL NUMBER NON-NaN VALUES: %.0f " % (len(VAR_all))
-    stattext += "\nMEAN: %.2f %s" % (VAR_all.mean(), unit)
-    stattext += "\nMEDIAN: %.2f %s" % (np.median(VAR_all), unit)
-    stattext += "\nMIN: %.2f %s" % (np.min(VAR_all), unit)
-    stattext += "\nMAX: %.2f %s" % (np.max(VAR_all), unit)
-    stattext += "\nSD: %.2f %s" % (np.std(VAR_all), unit)
+    # Prepare statistics text
+    stats_text = "\n\nQUICK STATS\n------------------"
+    stats_text += f"\nTOTAL NUMBER NON-NaN VALUES: {N_all:.0f} "
+    stats_text += f"\nMEAN: {VAR_all.mean():.2f} {unit}"
+    stats_text += f"\nMEDIAN: {np.median(VAR_all):.2f} {unit}"
+    stats_text += f"\nMIN: {np.min(VAR_all):.2f} {unit}"
+    stats_text += f"\nMAX: {np.max(VAR_all):.2f} {unit}"
+    stats_text += f"\nSD: {np.std(VAR_all):.2f} {unit}"
 
     textax.text(
         0.01,
         0.9,
-        attrtext + stattext,
+        attr_text + stats_text,
         va="top",
         transform=textax.transAxes,
         fontsize=10,

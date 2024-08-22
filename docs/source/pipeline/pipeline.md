@@ -1,4 +1,4 @@
-# Processing algorithm for Signature data
+# Processing algorithm
 
 The following describes a typical `kobbe` processing pipeline for ice and ocean data collected using a moored 5-beam Nortek *Signature250* or *Signature500* instruments.
 
@@ -335,13 +335,8 @@ ___
 ___
 ___
 
-### Q:
 
-- Where is open water stuff calculated?
-- Where is the filtering LE by LE-AST distance?
-___
-
-### Sources of error
+### Note: sources of error
 
 
 

@@ -1,32 +1,42 @@
 """
-Various calculations done on a xarray Dataset with signature data.
+Various calculations done on a xarray Dataset with Signature data.
 """
 
 import numpy as np
 import gsw
 import warnings
+import xarray as xr
+from typing import Optional, Tuple, Dict, Any
 
 
-def dep_from_p(DX, corr_atmo=True, corr_CTD_density=True):
+def dep_from_p(
+    ds: xr.Dataset,
+    corr_atmo: bool = True,
+    corr_CTD_density: bool = True
+) -> xr.Dataset:
     """
-    Calculate depth from:
+    Calculate depth from absolute pressure in a Signature xarray Dataset.
 
-    - Absolute pressure (measured by instrument)
-        - Using *Average_AltimeterPressure*
-          (very rarely differs from *Average_Pressure*
-           by more than ±5e-3 db).
-    - Atmospheric pressure (from *p_atmo* field)
-    - Gravitational acceleration (calculated from latitude)
-    - Ocean density (from data or default 1025 g/kg)
+    Computing depth based on the following:
+    - Absolute pressure measured by the instrument (from
+      `Average_AltimeterPressure` plus the fixed atmospheric offset which is
+      automaically subtracted from this field).
+    - Atmospheric pressure (from `p_atmo` field, if available).
+    - Gravitational acceleration (calculated from latitude).
+    - Ocean density (from `rho_CTD` field, if available, or default to 1027
+      kg/m³).
 
-    Input:
-    ------
-
-    DX: xarray Dataset with Signature data.
+    Args:
+        ds (xr.Dataset): xarray Dataset containing Signature data.
+        corr_atmo (bool, optional): If True, correct for atmospheric pressure
+                                    using the `p_atmo` field. Defaults to True.
+        corr_CTD_density (bool, optional): If True, use CTD-derived density
+                                           from the `rho_CTD` field.
+                                           Defaults to True.
 
     Returns:
-    --------
-    DX where the field "DEPTH" (TIME, SAMPLE) has been added.
+        xr.Dataset: The input Dataset with the "depth" field (TIME, SAMPLE)
+                    added.
     """
 
     note_str = (
@@ -36,12 +46,12 @@ def dep_from_p(DX, corr_atmo=True, corr_CTD_density=True):
     )
 
     # CALCULATE ABSOLUTE PRESSURE
-    p_abs = DX.Average_AltimeterPressure + DX.pressure_offset
+    p_abs = ds.Average_AltimeterPressure + ds.pressure_offset
 
     # CALCULATE OCEAN PRESSURE
     # Raising issues if we cannot find p_atmo (predefined atmospheric pressure)
-    if hasattr(DX, "p_atmo") and corr_atmo:
-        p_ocean = (p_abs - DX.p_atmo).data
+    if hasattr(ds, "p_atmo") and corr_atmo:
+        p_ocean = (p_abs - ds.p_atmo).data
         note_str += "\n- Atmospheric pressure (*p_atmo* field subtracted)."
     else:
         if corr_atmo:
@@ -67,33 +77,33 @@ def dep_from_p(DX, corr_atmo=True, corr_CTD_density=True):
         else:
             user_input_abort = "C"
 
-        p_ocean = DX.Average_AltimeterPressure.data
+        p_ocean = ds.Average_AltimeterPressure.data
         print("Continuing without atmospheric correction (careful!)..")
         note_str += (
-            "\n- !!! NO TIME_VARYING ATMOSPHERIC CORRECTION APPLIED !!!\n"
-            "  (using default atmospheric pressure offset"
-            " %.2f db)" % DX.pressure_offset
+            "\n- !!! NO TIME_VARYING ATMOSPHERIC CORRECTION APPLIED"
+            "  !!!\n (using default atmospheric pressure offset "
+            f"{ds.pressure_offset:.2f} db)"
         )
 
     # CALCULATE GRAVITATIONAL ACCELERATION
-    if DX.lat is None:
+    if ds.lat is None:
         raise Exception(
             'No "lat" field in the dataset. Add one using'
             " sig_append.set_lat() and try again."
         )
 
-    g = gsw.grav(DX.lat.data, 0)
-    DX["g"] = (
+    g = gsw.grav(ds.lat.data, 0)
+    ds["g"] = (
         (), g,
         {"units": "ms-2",
-         "note": f"Calculated using gsw.grav() for p=0 and lat={DX.lat:.2f}",
+         "note": f"Calculated using gsw.grav() for p=0 and lat={ds.lat:.2f}",
          },
     )
-    note_str += "\n- Using g=%.4f ms-2 (calculated using gsw.grav())" % g
+    note_str += f"\n- Using g={g:.4f} ms-2 (calculated using gsw.grav())"
 
     # CALCULATE OCEAN WATER DENSITY
-    if hasattr(DX, "rho_CTD") and corr_CTD_density:
-        rho_ocean = DX.rho_CTD.data
+    if hasattr(ds, "rho_CTD") and corr_CTD_density:
+        rho_ocean = ds.rho_CTD.data
         note_str += "\n- Using ocean density from the *rho_CTD* field."
         fixed_rho = False
     else:
@@ -105,7 +115,7 @@ def dep_from_p(DX, corr_atmo=True, corr_CTD_density=True):
             ).upper()
 
             while user_input_abort_dense not in ["A", "C"]:
-                print('Input ("%s") not recognized.' % user_input_abort)
+                print(f'Input ("{user_input_abort_dense}") not recognized.')
                 user_input_abort_dense = input(
                     'Enter "C" (continue with fixed) or "A" (abort): '
                 ).upper()
@@ -128,8 +138,8 @@ def dep_from_p(DX, corr_atmo=True, corr_CTD_density=True):
             rho_ocean = np.float(input("Enter rho (kg m-3): "))
         fixed_rho = True
 
-        print("Continuing with fixed rho = %.1f kg m-3" % rho_ocean)
-        note_str += "\n- Using FIXED ocean rho = %.1f kg m-3." % rho_ocean
+        print(f"Continuing with fixed rho = {rho_ocean:.1f} kg m-3")
+        note_str += f"\n- Using FIXED ocean rho = {rho_ocean:.1f} kg m-3."
 
     # CALCULATE DEPTH
     # Factor 1e4 is conversion db -> Pa
@@ -138,49 +148,52 @@ def dep_from_p(DX, corr_atmo=True, corr_CTD_density=True):
     else:
         depth = 1e4 * p_ocean / g / rho_ocean[:, np.newaxis]
 
-    DX["depth"] = (
+    ds["depth"] = (
         ("TIME", "SAMPLE"),
         depth,
         {"units": "m", "long_name": "Transducer depth", "note": note_str},
     )
 
-    return DX
-
-
-##############################################################################
-
-
-def mat_to_py_time(mattime):
-    """
-    Convert matlab datenum (days) to Matplotlib dates (days).
-
-    MATLAB base: 00-Jan-0000
-    Matplotlib base: 01-Jan-1970
-    """
-
-    mpltime = mattime - 719529.0
-
-    return mpltime
-
+    return ds
 
 ##############################################################################
 
 
-def daily_average(A, t, td=None, axis=-1, min_frac=0, function="median"):
+def daily_average(
+    A: np.ndarray,
+    t: np.ndarray,
+    td: Optional[np.ndarray] = None,
+    axis: int = -1,
+    min_frac: float = 0.0,
+    function: str = "median"
+) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Take a time series A on a time grid t and compute daily averages of A.
+    Compute daily averages of a time series A on a time grid t.
 
-    If day index *td* is not specified, it will be computed based on t.
+    This function computes daily averages or medians of the time series data
+    `A`, based on the time grid `t`. If the day index `td` is not specified, it
+    will be computed automatically. The function supports both 1D and 2D
+    arrays, with the time axis being the last axis.
 
-    A can be 1- or 2-dimensional, but the time axis must be the last axis.
-
-    min_frac: Required non-masked fraction (return nan otherwise)
+    Args:
+        A (np.ndarray): Input array containing the time series data, which can
+                        be 1D or 2D.
+        t (np.ndarray): Time grid corresponding to the data in `A`.
+        td (Optional[np.ndarray], optional): Day index. If not provided, it
+                                             will be computed from `t`.
+        axis (int, optional): Axis along which the computation is performed.
+                              Defaults to -1.
+        min_frac (float, optional): Minimum required non-masked fraction of
+                                    data to compute the statistic. If the valid
+                                    data fraction is less than `min_frac`,
+                                    NaN is returned. Defaults to 0.0.
+        function (str, optional): Function to use for daily aggregation. Can be
+                                  "median" or "mean". Defaults to "median".
 
     Returns:
-    --------
-
-    td: Day index (note: not the "mean time" - this would be approx. td+0.5)
-    Ad: Daily means
+        Tuple[np.ndarray, np.ndarray]:
+            - `Ad` (np.ndarray): Daily averaged data.
+            - `td` (np.ndarray): Corresponding day indices.
     """
 
     tfl = np.floor(t)
@@ -194,11 +207,7 @@ def daily_average(A, t, td=None, axis=-1, min_frac=0, function="median"):
     elif A.ndim == 2:
         Ad_shape = (A.shape[0], Nt)
     else:
-        raise Exception(
-            """
-        *daily_median()* only works for 1D or 2D arrays.
-        """
-        )
+        raise ValueError('*daily_median()* only works for 1D or 2D arrays.')
 
     Ad = np.zeros(Ad_shape) * np.nan
 
@@ -224,27 +233,35 @@ def daily_average(A, t, td=None, axis=-1, min_frac=0, function="median"):
 ##############################################################################
 
 
-def runningstat(A, window_size):
+def runningstat(A: np.ndarray, window_size: int) -> Dict[str, np.ndarray]:
     """
-    Calculate running statistics (mean, median, sd).
+    Calculate running statistics (mean, median, standard deviation) for a time
+    series.
 
-    Note: Reflects at the ends - may have to modify the fringes of
-    the time series for some applications..
+    This function computes running statistics (mean, median, and standard
+    deviation) for an equally spaced time series using a sliding window
+    approach. The window size must be odd, and the boundaries are handled by
+    reflecting the data at the ends.
+
+    Note: Reflects at the ends - may have to modify the fringes of the time
+    series for some applications..
 
     Based on script by Maksym Ganenko on this thread:
     https://stackoverflow.com/questions/33585578/
     running-or-sliding-median-mean-and-standard-deviation
 
-    Inputs
-    ------
-    A: Equally spaced time series
-    window_size: Window size for boxcar (must be odd)
+    Args:
+        A (np.ndarray): Equally spaced time series data. window_size (int):
+                        Size of the sliding window (must be odd).
 
-    Returns
-    -------
+    Returns:
+        Dict[str, np.ndarray]: A dictionary containing the running 'mean',
+                               'median', and 'std' (standard deviation) of the
+                               input time series.
 
-    RS: Dictionary containing 'mean', 'median' and 'std'
-
+    Raises:
+        AssertionError: If `window_size` is not odd or greater than the length
+                        of `A`.
     """
 
     assert window_size % 2 == 1, "window size must be odd"
@@ -271,16 +288,26 @@ def runningstat(A, window_size):
 
     return RS
 
-#####
+##############################################################################
 
 
-def clean_nanmedian(a, **kwargs):
+def clean_nanmedian(a: np.ndarray, **kwargs: Any) -> np.ndarray:
     """
-    Wrapper for the np.nanmedian function, but ignoring the annoying
-    RuntimeWarning when trynig to get the nanmedian of an all-NaN slice.
+    Compute the median of an array while ignoring NaNs, suppressing warnings
+    for all-NaN slices.
 
-    (Retaining default behaviour of returning NaN as the median of
-    all-NaN slices)
+    This function is a wrapper around `np.nanmedian` that suppresses the
+    RuntimeWarning triggered when computing the median of an all-NaN slice. The
+    default behavior of returning NaN for such slices is preserved.
+
+    Args:
+        a (np.ndarray): Input array containing numerical data, possibly with
+                        NaNs. **kwargs (Any): Additional keyword arguments to
+                        pass to `np.nanmedian`.
+
+    Returns:
+        np.ndarray: The median of the array along the specified axis, with NaNs
+                    ignored.
     """
     with warnings.catch_warnings():
         warnings.filterwarnings(action="ignore",
