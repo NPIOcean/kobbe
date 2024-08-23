@@ -3,6 +3,8 @@
 misc/laura/
 docs/build/
 tests/test_data/*.mat
+examples/
+graphics/
 *.pyc
 
 
