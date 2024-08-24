@@ -34,12 +34,14 @@ def download_file(url, local_filename):
     try:
         response.raise_for_status()
     except requests.exceptions.HTTPError as e:
-        raise RuntimeError(f'Test failing because remote test files (zenodo) '
+        raise RuntimeError(
+            f'Test failing because remote test files (zenodo) '
             f'could not be accessed. \n-> Check your internet connection?\n\n'
             f'Failed to download file from {url}\n\n Error: "{str(e)}"')
     with open(local_filename, 'wb') as f:
         for chunk in response.iter_content(chunk_size=8192):
             f.write(chunk)
+
 
 # Fixture to handle the mat files
 @pytest.fixture(scope="module")
@@ -78,15 +80,26 @@ def test_load_mat_files(mat_files):
     L_mock = len(mock_time)
     mock_slp = np.random.rand(L_mock) + 10  # Sea level pressure in dbar
 
-    slp_attrs = {'units': 'dbar', 'long_name': 'Sea level pressure at location'}
+    slp_attrs = {'units': 'dbar', 'long_name': 'Sea level pressure'}
 
     # Run the append_atm_pres function
-    ds = kobbe.append.append_atm_pres(ds, mock_slp, mock_time, attrs = slp_attrs)
+    ds = kobbe.append.append_atm_pres(ds.copy(), mock_slp, mock_time, attrs = slp_attrs)
 
     # Assertions to check the expected outcomes (data + attributes)
-    assert 'p_atmo' in ds, "The variable 'p_atmo' was not added to the dataset."
+    assert 'p_atmo' in ds, "append_atm_pres() did not add the variable 'p_atmo' to the dataset."
     assert ds['p_atmo'].attrs['units'] == 'dbar'
-    assert ds['p_atmo'].attrs['long_name'] == 'Sea level pressure at location'
+    assert ds['p_atmo'].attrs['long_name'] == 'Sea level pressure'
+    assert (9 < ds.p_atmo.mean() < 11).item()
+
+    # Droppig for now since it takes so long. Look into this again when making
+    # unit tests..
+    if False:
+        # Run the append_atm_pres-auto function
+        ds2 = kobbe.append.append_atm_pres_auto(ds.copy())
+        assert 'p_atmo' in ds2, "append_atm_pres() did not add the variable 'p_atmo' to the dataset."
+        assert ds2['p_atmo'].attrs['units'] == 'dbar'
+        assert ds2['p_atmo'].attrs['long_name'] == 'Sea level pressure'
+        assert (9 < ds2.p_atmo.mean() < 11).item()
 
     # Create mock CTD data
     mock_temp = np.random.rand(L_mock)*5 -1.8  # Temperature

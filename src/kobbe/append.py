@@ -1,5 +1,5 @@
 """
-KOBBE:APPEND
+KOBBE.APPEND
 
 Functions for appending and interpolating external
 datasets to an xarray Dataset containing Nortek Signature data.
@@ -12,6 +12,7 @@ from scipy.interpolate import interp1d
 import gsw
 from kval.util.time import matlab_time_to_python_time
 from kval.util.magdec import get_declination
+from kval.util.era5 import get_era5_time_series_point
 from matplotlib.dates import date2num
 import pandas as pd
 from typing import Optional, Union, List, Dict, Any
@@ -198,6 +199,64 @@ def append_ctd(
         time_mat=time_mat,
         extrapolate=extrapolate,
     )
+    return ds
+
+
+def append_atm_pres_auto(
+    ds: xr.Dataset,
+) -> xr.Dataset:
+    """
+    Automatically obtain atmospheric pressure from ERA-5 and append to
+    the dataset.
+
+    Can take a while (expect a minute or so for most applications).
+
+    Hourly ERA-5 data are obtained over OpenDAP from the Asia-Pacific
+    Data Research Center (APDRC): http://apdrc.soest.hawaii.edu/dods/
+    public_data/Reanalysis_Data/ERA5/hourly/Surface_pressure.info.
+
+    Inputs
+    ------
+
+    ds: xarray dataset with signature data.
+
+    Outputs
+    -------
+    ds: The xarray dataset including the SLP variable.
+    """
+
+    if 'lat' not in ds or 'lon' not in ds:
+        raise Exception(
+            "['lat', 'lon'] not found in dataset. Run append.set_lat first..")
+
+    ds_slp = get_era5_time_series_point('SLP', 'hourly',
+                                        ds.lat.copy(), ds.lon.copy(),
+                                        ds.TIME[0].item()-1,
+                                        ds.TIME[-1].item()+1)
+
+    # Define default attributes and update with any provided attributes
+    attrs_all = {"long_name": "Sea level pressure", "units": "dbar",
+                 "comment": ('Obtained from ERA-5 hourly surface pressure '
+                             '(nearest grid point)'),
+                 "era5_lon": f'{ds_slp.lon.item()} ({ds_slp.lon.item()-360})',
+                 "era5_lat": ds_slp.lat.item(),
+                 "era5_variable_name": "sp",
+                 "era5_opendap_source": ('http://apdrc.soest.hawaii.edu:80/'
+                                         'dods/public_data/Reanalysis_Data/'
+                                         'ERA5/hourly/Surface_pressure')
+                 }
+
+    # Append the sea level pressure data to the sig500 dataset
+    # Factor 1e4 converts from Pa to dbar
+    ds = add_to_sigdata(
+        ds,
+        ds_slp.SLP*1e-4,
+        ds_slp.time,
+        "p_atmo",
+        attrs=attrs_all,
+        time_mat=False
+    )
+
     return ds
 
 
