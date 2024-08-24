@@ -11,6 +11,7 @@ import xarray as xr
 from scipy.interpolate import interp1d
 import gsw
 from kval.util.time import matlab_time_to_python_time
+from kval.util.magdec import get_declination
 from matplotlib.dates import date2num
 import pandas as pd
 from typing import Optional, Union, List, Dict, Any
@@ -247,6 +248,39 @@ def append_atm_pres(
         time_mat=time_mat
     )
 
+    return ds
+
+
+def append_magdec_auto(
+        ds: xr.Dataset,
+        model: str = 'auto') -> xr.Dataset:
+    '''
+    Automatically obtain magnetic declination from the World Magnetic Model.
+
+    Wrapping the pygeomag module (https://pypi.org/project/pygeomag/) which
+    obtains declination angle from the World Magnetic Model (WMM).
+
+    model: str
+        Which WMM version to use.
+        Options: ['2010', '2015', '2020'], otherwise determined based on the
+        data. Note that auto detection can cause (small) discontinuities across
+        2014-2015 and 2019-2020.
+    '''
+
+    if 'lat' not in ds or 'lon' not in ds:
+        raise Exception(
+            "['lat', 'lon'] not found in dataset. Run append.set_lat first..")
+
+    dec = get_declination(
+        dates=ds.TIME.values, lat=ds.lat, lon=ds.lon, model=model)
+
+    attrs = {'note':
+             'Time-varying magnetic declination angle from the World Magnetic'
+             ' Model, accessed useing the *pymagdec* library '
+             '(https://pypi.org/project/pygeomag/).'}
+
+    ds = append_magdec(ds, magdec=dec, magdectime=ds.TIME, attrs=attrs
+                       )
     return ds
 
 

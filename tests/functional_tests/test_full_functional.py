@@ -110,7 +110,13 @@ def test_load_mat_files(mat_files):
     mock_magdec = [20, 20.3]
 
     # Run the append_magdec function
-    ds = kobbe.append.append_magdec(ds, mock_magdec, mock_magdec_time)
+    ds2 = ds.copy()
+    ds2 = kobbe.append.append_magdec(ds2, mock_magdec, mock_magdec_time)
+    assert 'magdec' in ds2, "The variable 'magdec' was not added to the dataset."
+    assert ds2['magdec'].attrs['units'] == 'degrees'
+
+    # Run the append_magdec_auto function
+    ds = kobbe.append.append_magdec_auto(ds)
     assert 'magdec' in ds, "The variable 'magdec' was not added to the dataset."
     assert ds['magdec'].attrs['units'] == 'degrees'
 
