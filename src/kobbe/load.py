@@ -301,7 +301,7 @@ def overview(ds: xr.Dataset) -> None:
     datefmt = "%d %b %Y %H:%M"
     starttime = num2date(ds.TIME[0].values).strftime(datefmt)
     endtime = num2date(ds.TIME[-1].values).strftime(datefmt)
-    ndays = (ds.TIME[-1] - ds.TIME[0]).values / (60 * 60 * 24)  # secs->days
+    ndays = (ds.TIME[-1] - ds.TIME[0]).values  # / (60 * 60 * 24)  # secs->days
 
     print("\nTIME RANGE:")
     print(f"{starttime}  -->  {endtime}  ({ndays:.1f} days)")
