@@ -70,8 +70,6 @@ def add_to_sigdata(
     if time_mat:
         time = matlab_time_to_python_time(time)
 
-    print(np.nanmean(data))
-
 
     # Convert time/data to NumPy arrays if they are not already one
     time = np.asarray(time)
@@ -89,8 +87,6 @@ def add_to_sigdata(
     interp1d_kws = {"bounds_error": False}
     if extrapolate:
         interp1d_kws["fill_value"] = "extrapolate"
-
-    print(np.nanmean(data))
 
     # Interpolatant of the time series
     if interpolate_input:  # Ignore NaNs if "interpolate_input"
