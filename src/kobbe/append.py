@@ -27,6 +27,7 @@ def add_to_sigdata(
     attrs: Optional[Dict[str, Any]] = None,
     time_mat: bool = False,
     extrapolate: bool = False,
+    interpolate_input: bool = True,
 ) -> xr.Dataset:
     """
     Adds a time series to the Signature dataset. Interpolates onto the "TIME"
@@ -57,6 +58,8 @@ def add_to_sigdata(
     extrapolate : bool, optional
         If True, values will be linearly extrapolated outside the range of the
         input data. By default, extrapolate is set to False.
+    interpolate_input: If True, the function will interpolate over gaps in the
+                       input data.
 
     Returns
     -------
@@ -67,8 +70,12 @@ def add_to_sigdata(
     if time_mat:
         time = matlab_time_to_python_time(time)
 
-    # Convert time to a NumPy array if it is not already one
+    print(np.nanmean(data))
+
+
+    # Convert time/data to NumPy arrays if they are not already one
     time = np.asarray(time)
+    data = np.asarray(data)
 
     # Handle string-based time input
     if isinstance(time[0], str):
@@ -83,8 +90,19 @@ def add_to_sigdata(
     if extrapolate:
         interp1d_kws["fill_value"] = "extrapolate"
 
+    print(np.nanmean(data))
+
     # Interpolatant of the time series
-    data_ip = interp1d(time, data, **interp1d_kws)
+    if interpolate_input:  # Ignore NaNs if "interpolate_input"
+        if np.isnan(data).any():
+            data_ip = interp1d(time[~np.isnan(data)],
+                               data[~np.isnan(data)],
+                               **interp1d_kws)
+        else:
+            data_ip = interp1d(time, data,
+                               **interp1d_kws)
+    else:
+        data_ip = interp1d(time, data, **interp1d_kws)
 
     # Add interpolated data to ds
     ds[name] = (("TIME"), data_ip(ds.TIME.data), attrs)
@@ -143,6 +161,10 @@ def append_ctd(
         (sound_speed_CTD), and Ocean Density (rho_CTD), all interpolated
         onto the signature data time grid.
     """
+
+    if 'lat' not in ds and 'lon' not in ds:
+        raise Exception('No lat/lon found in the dataset (required for CTD'
+                        ' calculations. Add with kobbe.append.set_lat/_lon.')
 
     # Convert practical salinity to absolute salinitysty to absolute salinity
     SA = gsw.SA_from_SP(sal, pres, ds.lon.data, ds.lat.data)
