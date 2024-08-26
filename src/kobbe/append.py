@@ -133,7 +133,18 @@ def append_ctd(
     extrapolate : bool, optional
         If True, allows extrapolation during interpolation, by default True.
     other_attrs: dict, optional
-        Dictonary of other attrActionablesty to absolute salinity
+        Dictonary of other attributes to include.
+
+    Returns
+    -------
+    xr.Dataset
+        The xarray Dataset with added variables for Absolute Salinity (SA),
+        Conservative Temperature (CT), Pressure (pres_CTD), Sound Speed
+        (sound_speed_CTD), and Ocean Density (rho_CTD), all interpolated
+        onto the signature data time grid.
+    """
+
+    # Convert practical salinity to absolute salinitysty to absolute salinity
     SA = gsw.SA_from_SP(sal, pres, ds.lon.data, ds.lat.data)
 
     # Convert in-situ temperature to conservative temperature
@@ -329,7 +340,7 @@ def append_magdec_auto(
 
     attrs = {'note':
              'Time-varying magnetic declination angle from the World Magnetic'
-             ' Model, accessed useing the *pymagdec* library '
+             ' Model, accessed using the `pymagdec` library '
              '(https://pypi.org/project/pygeomag/).'}
 
     ds = append_magdec(ds, magdec=dec, magdectime=ds.TIME, attrs=attrs

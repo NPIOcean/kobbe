@@ -181,6 +181,8 @@ def calculate_surface_position(
             "\n- Altimeter distance recomputed using updated "
             "sound speed (*sound_speed_CTD* field)"
         )
+        ssp_ratio_mean = np.round(sound_speed_ratio_obs_nom.mean().item(), 4)
+
     # Set ratio to 1 if we do not have CTD sound speed.
     else:
         sound_speed_ratio_obs_nom = 1
@@ -188,6 +190,7 @@ def calculate_surface_position(
             "\n- (No correction made for CTD sound speed - using Signature "
             "sound speed estimate)."
         )
+        ssp_ratio_mean = 1
 
     # Define beta_LE/_AST (the open water correction factor)
     # to be applied to the data
@@ -253,9 +256,7 @@ def calculate_surface_position(
             "units": "m",
             "note": note_str,
             "tilt_correction_mean": np.round(tilt_factor.mean().item(), 4),
-            "sound_speed_ratio_mean": np.round(
-                sound_speed_ratio_obs_nom.mean().item(), 4
-            ),
+            "sound_speed_ratio_mean": ssp_ratio_mean,
             "fixed_offset_alpha_cm": np.round(alpha * 1e2, 4),
             "varying_ss_factor_beta_mean": beta_mean,
             "varying_ss_factor_beta_max": beta_max,
@@ -497,7 +498,7 @@ def get_open_water_correction(
 
 def compare_open_water_correction(
     ds: xr.Dataset,
-    show_plots: bool = True
+    show_plots: bool = True,
 ) -> None:
     """
     Compare the sea ice draft before and after applying open water corrections.
@@ -521,24 +522,21 @@ def compare_open_water_correction(
 
     # Copy the dataset to preserve the original state for comparison
     ds0 = ds.copy()
+
+    # Check whether a sound speed factor was originally applied (want to use)
+    # the same approach for comparison
+    if "No correction made for CTD sound speed" in ds.SEA_ICE_DRAFT_LE.note:
+        corr_sound_speed_CTD = False
+    else:
+        corr_sound_speed_CTD = True
+
     ds2 = ds.copy()
 
     # Apply draft calculation to the copy
-    ds2 = calculate_draft(ds2)
+    ds2 = calculate_draft(ds2, corr_sound_speed_CTD=corr_sound_speed_CTD)
 
-    # Print mean and median offsets for LE and AST methods
-    print(
-        "LE: Mean (median) offset: "
-        f"{ds.ow_surface_before_correction_LE.mean()*1e2:.1f} cm "
-        f"({clean_nanmedian(ds.ow_surface_before_correction_LE)*1e2:.1f} cm)"
-    )
 
-    print(
-        "AST: Mean (median) offset: "
-        f"{ds.ow_surface_before_correction_AST.mean()*1e2:.1f} cm "
-        f"({clean_nanmedian(ds.ow_surface_before_correction_AST)*1e2:.1f} cm)"
-    )
-
+    print('OPEN WATER CORRECTIONS:')
     print(f"LE: Applied offset alpha: {ds.alpha_LE * 1e2:.1f} cm")
     print(
         "LE: Applied time-varying sound speed factor beta: Mean (median): "
@@ -551,14 +549,53 @@ def compare_open_water_correction(
         f"{ds.beta_AST.mean():.5f} ({clean_nanmedian(ds.beta_AST):.5f})"
     )
 
+    # Print mean and median offsets for LE and AST methods
+    print('\nEFFECTS OF OPEN WATER CORRECTIONS:')
+
     print(
-        f"LE - MEAN SEA ICE DRAFT:\n"
+        "LE: Mean (median) offset: "
+        f"{ds.ow_surface_before_correction_LE.mean()*1e2:.1f} cm "
+        f"({clean_nanmedian(ds.ow_surface_before_correction_LE)*1e2:.1f} cm)"
+    )
+
+    # Obtain (all) estimates Open Water Surface Depths
+    ow_surface_depth_full_LE = get_open_water_surface_depth(ds2, method="LE")
+    ow_surface_depth_full_AST = get_open_water_surface_depth(ds2, method="AST")
+
+    print(
+        "LE: Mean (median) offset after correction: "
+        f"{ow_surface_depth_full_LE.mean()*1e2:.1f} cm "
+        f"({clean_nanmedian(ow_surface_depth_full_LE)*1e2:.1f} cm)"
+    )
+    print(
+        "LE: Mean (median) offset (Low-Passed): "
+        f"{ds.ow_surface_before_correction_LE_LP.mean()*1e2:.1f} cm "
+        f"({clean_nanmedian(ds.ow_surface_before_correction_LE_LP)*1e2:.1f}"
+        " cm)"
+    )
+    print(
+        "AST: Mean (median) offset: "
+        f"{ds.ow_surface_before_correction_AST.mean()*1e2:.1f} cm "
+        f"({clean_nanmedian(ds.ow_surface_before_correction_AST)*1e2:.1f} cm)"
+    )
+    print(
+        "AST: Mean (median) offset after correction: "
+        f"{ow_surface_depth_full_AST.mean()*1e2:.1f} cm "
+        f"({clean_nanmedian(ow_surface_depth_full_AST)*1e2:.1f} cm)"
+    )
+    print(
+        "AST: Mean (median) offset (Low-Passed): "
+        f"{ds.ow_surface_before_correction_AST_LP.mean()*1e2:.1f} cm "
+        f"({clean_nanmedian(ds.ow_surface_before_correction_AST_LP)*1e2:.1f}"
+        " cm)"
+    )
+    print(
+        f"\nLE - MEAN SEA ICE DRAFT:\n"
         f"Before correction: {ds0.SEA_ICE_DRAFT_MEDIAN_LE.mean():.2f} m\n"
         f"After correction: {ds2.SEA_ICE_DRAFT_MEDIAN_LE.mean():.2f} m"
     )
-
     print(
-        f"AST - MEAN SEA ICE DRAFT:\n"
+        f"\nAST - MEAN SEA ICE DRAFT:\n"
         f"Before correction: {ds0.SEA_ICE_DRAFT_MEDIAN_AST.mean():.2f} m\n"
         f"After correction: {ds2.SEA_ICE_DRAFT_MEDIAN_AST.mean():.2f} m"
     )
@@ -566,7 +603,7 @@ def compare_open_water_correction(
     # Plot results if requested
     if show_plots:
 
-        fig, ax = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
+        fig, ax = plt.subplots(2, 1, figsize=(10, 10), sharex=True)
 
         # Plot open water surface depth for LE and AST
         ax[0].plot_date(
@@ -615,6 +652,7 @@ def compare_open_water_correction(
         for axn in ax:
             axn.legend(ncol=2)
             axn.grid()
+
         labfs = 9
         ax[0].set_ylabel("Estimated open water\nsurface depth [m]",
                          fontsize=labfs)
@@ -625,7 +663,7 @@ def compare_open_water_correction(
         ax[0].set_ylim(1, -0.4)
 
         # Time-draft scatter plots for before and after correction
-        fig2, ax2 = plt.subplots(1, 2, figsize=(12, 6),
+        fig2, ax2 = plt.subplots(3, 1, figsize=(10, 14),
                                  sharex=True, sharey=True)
         ax2[0].scatter(
             ds0.time_average,
@@ -640,42 +678,85 @@ def compare_open_water_correction(
             ds.time_average,
             ds2.SURFACE_DEPTH_LE,
             marker=".",
-            color="r",
+            color="tab:red",
             alpha=0.2,
             s=2,
             label="Corrected",
         )
 
+        ax2[0].plot_date(
+            ds2.TIME,
+            ds.ow_surface_before_correction_LE_LP,
+            "-", lw=1.5,
+            label="Estimated ow surface deph",
+            color="b",
+        )
+
         ax2[1].scatter(
-            ds0.TIME,
-            ds0.SEA_ICE_DRAFT_MEDIAN_LE,
+            ds0.time_average,
+            ds0.SURFACE_DEPTH_LE.where(~ds0.ICE_IN_SAMPLE_ANY),
             marker=".",
             color="k",
-            alpha=0.3,
+            alpha=0.1,
             s=2,
             label="Uncorrected",
         )
         ax2[1].scatter(
+            ds.time_average,
+            ds2.SURFACE_DEPTH_LE.where(~ds2.ICE_IN_SAMPLE_ANY),
+            marker=".",
+            color="tab:red",
+            alpha=0.1,
+            s=2,
+            label="Corrected",
+        )
+        ax2[1].plot_date(
+            ds2.TIME,
+            ds.ow_surface_before_correction_LE_LP,
+            "-", lw=1,
+            label="Estimated ow surface deph",
+            color="b",
+        )
+
+        ax2[2].scatter(
+            ds0.TIME,
+            ds0.SEA_ICE_DRAFT_MEDIAN_LE,
+            marker=".",
+            color="k",
+            alpha=0.1,
+            s=2,
+            label="Uncorrected",
+        )
+        ax2[2].scatter(
             ds.TIME,
             ds2.SEA_ICE_DRAFT_MEDIAN_LE,
             marker=".",
-            color="r",
-            alpha=0.3,
+            color="tab:red",
+            alpha=0.1,
             s=2,
             label="Corrected",
         )
         ax2[0].set_title("LE Surface depth (ALL)")
-        ax2[1].set_title("LE sea ice draft (ice only, ensemble averaged)")
+        ax2[1].set_title("LE Surface depth (OPEN WATER ONLY)")
+        ax2[2].set_title("LE sea ice draft (ice only, ensemble averaged)")
 
         for axn in ax2:
-            axn.legend()
+            leg = axn.legend(ncol=3, fontsize=10, loc=1,
+                             bbox_to_anchor=(0.7, 0.1))
+            # Set the legend symbols to 100% opacity and make them bigger
+            for legend_handle in leg.legendHandles:
+                legend_handle.set_alpha(1.0)
+                legend_handle._sizes = [50]
             axn.grid()
             axn.set_ylabel("[m]")
+            axn.set_ylim(-2, None)
 
         labfs = 9
-        ax2[0].set_ylabel("Estimated open water\nsurface depth [m]",
+        ax2[0].set_ylabel("Estimated\nsurface depth [m]",
                           fontsize=labfs)
-        ax2[1].set_ylabel("BETA (OWSD correction factor)",
+        ax2[1].set_ylabel("Estimated open water\nsurface depth [m]",
+                          fontsize=labfs)
+        ax2[2].set_ylabel("Sea ice draft [m]",
                           fontsize=labfs)
 
         # Dummy for date axis..
@@ -684,3 +765,51 @@ def compare_open_water_correction(
         ax2[0].invert_yaxis()
 
         plt.show()
+
+
+def draft_overview(ds, le_ast='LE'):
+
+    ssp_mean_ctd = (f'{ds.sound_speed_CTD.mean():.1f} cm/s'
+                    if 'sound_speed_CTD' in ds else 'N/A')
+    ssp_mean_sig = f'{ds.Average_Soundspeed.mean():.1f} cm/s'
+
+    ssp_ratio_num = np.nanmean(ds.sound_speed_CTD.data[:, np.newaxis]
+                       / ds.Average_Soundspeed.data)
+    ssp_ratio = (
+        f'{ssp_ratio_num:.4f} ({100*(ssp_ratio_num-1):.2f} % change)'
+        if 'sound_speed_CTD' in ds else '1')
+
+    print('SOUND SPEED CORRECTION:')
+    print(f'Mean Signature sound speed:\n {ssp_mean_sig}')
+    print(f'Mean CTD sound speed:\n {ssp_mean_ctd}')
+    print('Mean corrective sound speed factor applied to altimeter length:'
+          f'\n {ssp_ratio}')
+    print('Positive (negative) change means smaller (greater)'
+          ' surface depth/ice draft estimate.\n')
+
+    tilt_factor_mean = np.cos(np.pi * ds.tilt_Average / 180).mean().item()
+    tilt_factor = (
+        f'{1-tilt_factor_mean:4f} '
+        f'({100*(tilt_factor_mean-1):.2f} % change)')
+
+    print('TILT CORRECTION:')
+    print('Tilt:')
+    print(f' {ds.tilt_Average.mean():.2f}° (mean), '
+          f'{ds.tilt_Average.median():.2f}° (median)')
+    print('Mean corrective tilt factor applied to altimeter length (minus 1):'
+          f'\n {tilt_factor}')
+    print('Non-zero tilt factor means greater'
+          ' surface depth/ice draft estimate.\n')
+
+    alpha_key, beta_key = f'alpha_{le_ast}', f'beta_{le_ast}'
+
+    alpha = f'{ds[alpha_key].item()*1e2:.2f} cm' if alpha_key in ds else 'N/A'
+    beta_mean_minus1 = (f'{np.nanmean(ds[beta_key]).item()-1:.2e}'
+                        if beta_key in ds else 'N/A')
+    beta_median_minus1 = (f'{clean_nanmedian(ds[beta_key]).item()-1:.2e}'
+                          if beta_key in ds else 'N/A')
+
+    print(f'OPEN WATER CORRECTION ({le_ast}):')
+    print(f'Fixed offset ALPHA:\n {alpha}')
+    print(f'Varying sound speed BETA (minus 1):\n'
+          f' {beta_mean_minus1} (mean), {beta_median_minus1} (median)')

@@ -184,6 +184,30 @@ def matfiles_to_dataset(
 
     return ds
 
+##############################################################################
+
+
+def load_nc(nc_file: str) -> xr.Dataset:
+
+    """
+    Open an existing Signature dataset that was previously
+    saved in NetCDF format and loads it as an xarray Dataset. The dataset
+    is opened without applying CF (Climate and Forecast) metadata decoding.
+
+    Parameters:
+    -----------
+    nc_file : str
+        The path to the NetCDF file that contains the saved dataset.
+
+    Returns:
+    --------
+    xr.Dataset
+        An xarray Dataset containing the data from the specified NetCDF file.
+    """
+
+    ds = xr.open_dataset(nc_file, decode_cf=False)
+
+    return ds
 
 ##############################################################################
 
@@ -775,6 +799,7 @@ def to_nc(
     icevel: bool = True,
     oceanvel: bool = False,
     all: bool = False,
+    verbose: bool = True,
 ) -> Optional[None]:
     """
     Export a Dataset to a netCDF file.
@@ -799,6 +824,9 @@ def to_nc(
     all : bool, optional
         If True, include all variables from the Dataset in the export.
         Default is False.
+    verbose: bool, optional
+        Whether to print a little statement after successful save.
+        Default is True.
 
     Returns
     -------
@@ -856,4 +884,5 @@ def to_nc(
 
         # Saving
         dsc[varlist].to_netcdf(file_path)
-        print(f"Saved data to file:\n{file_path}")
+        if verbose:
+            print(f"Saved data to file:\n{file_path}")
