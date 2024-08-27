@@ -362,7 +362,6 @@ def get_open_water_surface_depth_LP(
         owds_med,
         open_water_surface_depth.TIME,
         min_frac=min_frac_daily,
-        axis=-1,
         function="median",
     )
 
@@ -447,7 +446,7 @@ def get_open_water_correction(
     # Obtain daily, smoothed instrument depths
     depth_med = ds.depth.median(dim="SAMPLE")
     depth_med_daily, _ = daily_average(
-        depth_med, ds.TIME, td=td - 0.5, axis=-1, function="median"
+        depth_med, ds.TIME, td=td - 0.5, function="median"
     )
     RS_depth = runningstat(depth_med_daily, run_window_days)
     depth_lp = RS_depth["mean"]  # <--

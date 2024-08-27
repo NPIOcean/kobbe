@@ -260,7 +260,6 @@ def daily_average(
     A: np.ndarray,
     t: np.ndarray,
     td: Optional[np.ndarray] = None,
-    axis: int = -1,
     min_frac: float = 0.0,
     function: str = "median"
 ) -> Tuple[np.ndarray, np.ndarray]:

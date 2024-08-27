@@ -3,26 +3,9 @@ Test function running through the full functionality.
 
 Does not test all functionality, runs through the whole processing chain.
 
-
-Downloading two test .mat files from M1_1 stored on Zenodo
-(https://zenodo.org/record/13223574, DOI 10.5281/zenodo.13223573)
-and working with these.
-
-- The download takes a while; for faster executions download the files
-  to tests/test_data/ (should already be .gitignored )
-
-STATUS:
-- Setup ok
-    - Test files are on zenodo
-    - Confirmed elsewhere that I can download files
-    - Want to work on packaging for a bit before returning here
-      (skip the nasty import stuff)
-
 '''
 
 import pytest
-import os
-import requests
 import kobbe
 import xarray as xr
 import numpy as np
