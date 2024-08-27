@@ -10,8 +10,7 @@ import numpy as np
 import gsw
 import warnings
 import xarray as xr
-from typing import Optional, Tuple, Dict, Any
-
+from typing import Optional, Tuple, Dict, Any, Union
 
 def dep_from_p(
     ds: xr.Dataset,
@@ -159,6 +158,100 @@ def dep_from_p(
     )
 
     return ds
+
+##############################################################################
+
+
+def footprint(signature: Union[xr.Dataset, str],
+              depth: Union[float, None] = None,
+              verbose: bool = True) -> float:
+    """
+    Calculate the approximate footprint width of the vertical beam for an
+    acoustic instrument based on the mean depth of the instrument.
+
+    Parameters
+    ----------
+    signature : xr.Dataset, str
+        Either: xarray Dataset containing the Signature instrument data.
+        Or: a string 'Signature250' or 'Signature500'.
+    depth : Union[float, None], optional
+        The depth at which to calculate the footprint width. If not provided,
+        the mean depth from the dataset (`ds.depth.mean()`) will be used. The
+        depth value is rounded to one decimal place.
+    verbose : bool, optional
+        If True, prints the calculated footprint width along with the depth and
+        beam width angle. Default is True.
+
+    Returns
+    -------
+    float
+        The calculated footprint width at the specified depth, rounded to one
+        decimal place.
+
+    Raises
+    ------
+    ValueError
+        If the `instrument` attribute in the dataset is not "Signature500" or
+        "Signature250".
+
+    Notes
+    -----
+    The footprint width is calculated using the following formula:
+
+        footprint_width = 2 * depth * tan(beam_width_angle_rad / 2)
+
+    where `beam_width_angle_rad` is the beam width angle in radians, which is
+    derived from the instrument type.
+
+    Examples
+    --------
+    >>> ds = xr.Dataset(attrs={"instrument": "Signature500", "depth": (["time"], [50, 60, 55])})
+    >>> footprint(ds)
+    Beam width at surface: 2.5 m.
+    For depth 55.0 m and beam width angle 2.9 degrees (Signature500).
+    2.5
+    """
+
+    if isinstance(signature, str):
+        if signature == 'Signature500':
+            beam_width_angle_deg = 2.9
+        elif signature == 'Signature250':
+            beam_width_angle_deg = 2.2
+        else:
+            raise ValueError('Beam width angle unknown when `instr` is '
+                             'not either "Signature250" or "Signature500".')
+        if not depth:
+            raise ValueError('No `depth` specified..')
+        instrument = signature
+
+    elif isinstance(signature, xr.Dataset):
+        if signature.instrument == 'Signature500':
+            beam_width_angle_deg = 2.9
+        elif signature.instrument == 'Signature250':
+            beam_width_angle_deg = 2.2
+        else:
+            raise ValueError('Beam width angle unknown when `instrument` is '
+                             'not either "Signature250" or "Signature500".')
+        if not depth:
+            if 'depth' in signature:
+                depth = np.round(signature.depth.mean().item(), 1)
+            else:
+                raise ValueError(
+                    'No `depth` field found in dataset. Run kobbe.calc.'
+                    'dep_to_p() or supply a `depth` to this function.')
+        instrument = signature.instrument
+    else:
+        raise ValueError('`instr` must be a string or a dataset.')
+
+    beam_width_angle_rad = beam_width_angle_deg*np.pi/180
+    beam_width = np.round(2*depth*np.tan(beam_width_angle_rad/2), 1)
+
+    if verbose:
+        print(f'Beam width at surface: {beam_width} m.\n\nFor depth {depth} m '
+              f'and beam width angle {beam_width_angle_deg:.1f} degrees '
+              f'({instrument}).')
+
+    return beam_width
 
 ##############################################################################
 

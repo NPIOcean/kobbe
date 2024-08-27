@@ -137,6 +137,14 @@ def matfiles_to_dataset(
             except Exception as e:
                 print(f"Failed at {filename[-10:]} with error: {e}")
 
+    # Raise an error if there is no data within the given time range.
+    if ds.sizes['time_average'] == 0:
+        if time_range:
+            raise ValueError('No data found within the given time range'
+                             f'{time_range}.')
+        else:
+            raise ValueError('No data found.')
+
     # Reads the pressure offset(s), i.e. the fixed atmospheric pressure
     # used to obtain sea pressure-
 
@@ -205,7 +213,18 @@ def load_nc(nc_file: str) -> xr.Dataset:
         An xarray Dataset containing the data from the specified NetCDF file.
     """
 
-    ds = xr.open_dataset(nc_file, decode_cf=False)
+    if not os.path.isfile(nc_file):
+        raise FileNotFoundError(f"The file '{nc_file}' does not exist or is "
+                                "not a valid file path.")
+
+    try:
+        ds = xr.open_dataset(nc_file, decode_cf=False)
+    except ValueError:
+        # Handle cases where the file is not a valid NetCDF file or cannot be
+        # read
+        raise ValueError(
+            f"Failed to load the NetCDF file '{nc_file}'. Likely not a valid"
+            " netCDF file.")
 
     return ds
 
@@ -389,9 +408,7 @@ def _reshape_ensembles(
         raise ValueError("Dataset must contain the 'time_average' dimension.")
 
     ###########################################################################
-    # ADD A "TTIME" COORDINATE (ONE ENTRY PER ENSEMBLE)
-
-    Nt = len(ds.time_average)
+    # ADD A "TIME" COORDINATE (ONE ENTRY PER ENSEMBLE)
 
     Nt = len(ds.time_average)
     time_average_data = ds.time_average.data
