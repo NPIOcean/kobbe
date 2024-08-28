@@ -22,6 +22,10 @@ import warnings
 import os
 import glob2
 from typing import List, Optional, Tuple, Union, Dict, Any
+from kval.util import internals
+
+if internals.is_notebook():
+    from IPython.display import display, clear_output
 
 ##############################################################################
 
@@ -287,12 +291,21 @@ def chop(
             ax.set_xlabel("Index")
             ax.set_ylabel("Pressure [db]")
             ax.invert_yaxis()
-            ax.set_title(f"Suggested chop: {indices} (to red curve)."
-                         " Close this window to continue..")
+            ax.set_title(f"Suggested chop: {indices} (to red curve).")
             ax.legend()
-            plt.show(block=True)
+
+            # Ensure plot updates and displays (different within notebook with
+            # widget backend..)
+            if internals.is_notebook():
+                display(fig)
+            else:
+                plt.show(block=False)
+
             print(f"Suggested chop: {indices} (to red curve)")
             accept = input("Accept (y/n)?: ")
+
+            # Close the plot after input to avoid re-display
+            plt.close(fig)
 
         if accept.lower() == "n":
             print("Not accepted -> Not chopping anything now.")
