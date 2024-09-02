@@ -901,7 +901,7 @@ def to_nc(
                 "SEA_ICE_DRAFT_LE",
                 "SEA_ICE_DRAFT_MEDIAN_LE",
                 "SEA_ICE_DRAFT_AST",
-                "SEA_ICE_DRAFT_LE",
+                "SEA_ICE_DRAFT_MEDIAN_AST",
             ]
         if icevel:
             varlist += ["uice", "vice", "Uice", "Vice"]

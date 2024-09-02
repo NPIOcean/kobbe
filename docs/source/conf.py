@@ -25,7 +25,8 @@ extensions = ['sphinx.ext.autodoc',
               'sphinx.ext.coverage',
               'sphinx.ext.napoleon',
               'myst_parser',
-              'sphinx.ext.mathjax',]  # For LaTeX support]
+              'sphinx.ext.mathjax',
+              'nbsphinx']  # For LaTeX support]
 
 
 myst_enable_extensions = [

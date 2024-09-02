@@ -205,7 +205,8 @@ def footprint(signature: Union[xr.Dataset, str],
 
     Examples
     --------
-    >>> ds = xr.Dataset(attrs={"instrument": "Signature500", "depth": (["time"], [50, 60, 55])})
+    >>> ds = xr.Dataset(attrs={"instrument": "Signature500",
+                        "depth": (["time"], [50, 60, 55])})
     >>> footprint(ds)
     Beam width at surface: 2.5 m.
     For depth 55.0 m and beam width angle 2.9 degrees (Signature500).

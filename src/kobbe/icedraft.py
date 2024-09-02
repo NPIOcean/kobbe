@@ -12,7 +12,7 @@ from kobbe.calc import runningstat, daily_average, clean_nanmedian
 from kobbe import append
 import xarray as xr
 from typing import Tuple
-
+import pandas as pd
 
 def calculate_draft(
     ds: xr.Dataset,
@@ -374,9 +374,27 @@ def get_open_water_surface_depth_LP(
     # 5. Smooth with running mean
     RS = runningstat(owds_med_daily_interp, run_window_days)
 
-    # Export filtered, ensemble median, daily averaged, smoothed daily owsd.
+    # Store filtered, ensemble median, daily averaged, smoothed daily owsd.
     # Also daily time array (td+0.5) of the midpoint of the daily estimates.
-    return RS["mean"], time_daily + 0.5
+    RS_mean = RS["mean"]
+    timestamp_day = time_daily + 0.5
+
+    # 6. Forward and backward fill if we have Nans at the start
+    #    or end (using nice pandas functionlity for this)
+
+    if np.isnan(RS_mean).any():
+
+        # Create a DataFrame
+        df_RS = pd.DataFrame(
+            {'timestamp_day': timestamp_day, 'RS_mean': RS_mean})
+
+        # Use ffill and bfill
+        df_RS['RS_mean'] = df_RS['RS_mean'].ffill().bfill()
+
+        # Convert the filled RS_mean column back to a NumPy array
+        RS_mean = df_RS['RS_mean'].to_numpy()
+
+    return RS_mean, timestamp_day
 
 
 ###########
@@ -743,7 +761,7 @@ def compare_open_water_correction(
             leg = axn.legend(ncol=3, fontsize=10, loc=1,
                              bbox_to_anchor=(0.7, 0.1))
             # Set the legend symbols to 100% opacity and make them bigger
-            for legend_handle in leg.legendHandles:
+            for legend_handle in leg.legend_handles:
                 legend_handle.set_alpha(1.0)
                 legend_handle._sizes = [50]
             axn.grid()

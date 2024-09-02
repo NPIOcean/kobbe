@@ -1,7 +1,10 @@
-#### Øyvind's:
+#### Custom
 
 misc/laura/
 docs/build/
+docs/example_notebooks_basic_example/test_data/.mat
+docs/example_notebooks_basic_example/test_data/.nc
+
 tests/test_data/*.mat
 examples/
 graphics/
