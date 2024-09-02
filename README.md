@@ -3,7 +3,11 @@
 ![](docs/images/logos_illustrations/kobbe_header.png)
 
 
-Version 0.1: *In development.*
+`v0.1.0-beta`
+
+
+[![DOI](https://zenodo.org/badge/803003126.svg)](https://zenodo.org/doi/10.5281/zenodo.13631398)
+
 
 
 #### [Documentation page](https://kobbe.readthedocs.io/) *(in development)*
