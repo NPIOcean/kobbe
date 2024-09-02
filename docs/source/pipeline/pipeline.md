@@ -2,8 +2,15 @@
 
 The following describes a typical `kobbe` processing pipeline for ice and ocean data collected using a moored 5-beam Nortek *Signature250* or *Signature500* instruments.
 
-It describes reading Signature files into the `kobbe` environment, appending auxiliary data if available, and applying post-processing steps editing the data. Finally, metadata are edited  to conform with scientific formatting standards, and the final dataset is exported as a netCDF file.
+It describes reading Signature files into the `kobbe` environment, appending auxiliary data if available, Sand applying post-processing steps editing the data. Finally, metadata are edited  to conform with scientific formatting standards, and the final dataset is exported as a netCDF file.
 
+
+
+```{note}
+  Development of `kobbe` has so far focused on sea ice draft. Functionality exists for parsing and processing sea ice and ocean velocity, but this is under development and not well documented below.
+
+  (I.e., steps 11-16 are incomplete..)
+```
 
 
 ___
@@ -32,13 +39,11 @@ ___
 - Renames variables and appends relevant metadata.
 - Regrids from `Average_TIME` to 2D (`TIME`, `SAMPLE`):
 
-
-
  <a href="../_static/proc_images/kobbe_1d_to_2d.png" target="_blank">
     <img src="../_static/proc_images/kobbe_1d_to_2d.png" width="250" height="100" alt="SIC Spectra">
   </a>
 
-- Calculates absolute tilt from pitch roll.
+- Calculates absolute tilt from pitch/roll.
 </p>
 </details>
 
@@ -56,12 +61,10 @@ Currently in `kobbe.load.matfiles_to_dataset()` (calls `kobbe.append._add_SIC_FO
     <img src="../_static/proc_images/FOM.png" width="250" height="100" alt="FOM">
   </a>
 
-- Using a FOM threshold of 1000 to classify "good"/"bad".
+- FOM is almost completely binary distrubuted. We use a default FOM threshold of 10 000 to classify "good"/"bad".
 - Using FOM for all beams to get:
     - `ICE_IN_SAMPLE` (FOM < 10000 for all 4 beams)
     - `ICE_IN_SAMPLE_ANY` (FOM < 10000 for any of the 4 beams)
-
-
 
 
 Calculating a "sea ice concentration" from `ICE_IN_SAMPLE` gives a fairly good match with remote sensing:
@@ -85,13 +88,16 @@ ___
 <summary><b>4. Append external data</b></summary>
 <p>
 
-- Various functions in (`kobbe.append`):
-    - `append_ctd()` - CTD data if available
-    - `append_atm_pres()` - Atmospheric pressure from e.g. reanalysis
-    - `append_magdec()` - Magnetic declination data
-    - `append_to_sigdata()` - Other contextual data (remote sensing SIC/SIT, for example)
-- Interpolates onto `TIME` grid.
-- Format and names are standardized for subsequent use in post-processing operations.
+External data (sea level pressure, CTD measurements, magnetic declination) are required for optimal processing (although it is possible to proces data without them). Various functions in `kobbe.append` add external data to the xarray Dataset containing the signature data::
+
+
+  - `append_ctd()` - CTD data if available
+  - `append_atm_pres()` - Append atmospheric pressure from a preexisting dataset
+      - `append_atm_pres_auto()` - Append atmospheric pressure by automatically downloading hourly ERA-5 sea level pressure from the nearest grid point and appending it to the dataset
+  - `append_magdec()` - Magnetic declination data
+      - `append_magdec_auto()` - Automatically obtain magnetic declination from the World Magnetic Model (using the [`geomag`](https://pypi.org/project/pygeomag/) module) and append to the dataset.
+  - `append_to_sigdata()` - Other contextual data (remote sensing SIC/SIT, for example)
+All external variables are interpolated onto the `TIME` grid. Format and names are standardized for subsequent use in post-processing operations.
 
 </p>
 </details>
@@ -102,6 +108,8 @@ ___
 <summary><b>5. Calculate transducer depth from pressure
 </b></summary>
 <p>
+
+In order to obtain accurate sea ice draft readings, we need to knwo the depth of the instrument. We calculate this from sea pressure (absolute pressure minus atmospheric pressure) and density using the hydrostatic relation.
 
 - `kobbe.calc.dep_from_p()`
   1. $p_{ABS}$ = `Average_AltimeterPressure` + `conf.PressureOffset`
@@ -127,6 +135,8 @@ ___
 </b></summary>
 <p>
 
+The vertical distance between the sea surface and the scattering surface (ocean-ice or ocean-air interfacce), $\eta$, is first calculated without any empirical corrections using the function
+
 - `kobbe.icedraft.calculate_draft()`
 
 The vertical distance between the transducer head and the scattering surface detected by the vertical beam, $S_v$ is taken as `Average_AltimeterDistance` (LE or AST) after applying some corrections:
@@ -145,18 +155,18 @@ The vertical distance between the transducer head and the scattering surface det
 
 A quality parameter `Average_AltimeterQualityLE/AST` is associated with each `Average_AltimeterDistance` sample. We apply this automatic quality flag by setting $S_v$ to NaN wherever `Average_AltimeterQualityLE/AST` is below a certain thrreshold (default value 8000).
 
-The vertical position $z_S$ of the scattering surface relative to the sea surface (positive downward) is computed from $S_v$: and depth $D$:
+The vertical position $\eta$ of the scattering surface relative to the sea surface (positive downward) is computed from $S_v$: and depth $D$:
 
-> $z_S = D - S_v - \alpha_{OW}$
+> $\eta = D - S_v - \alpha_{OW}$
 
 Where $\alpha_{OW}$ is an empirically determined fixed offset, initially set to zero.
 
-$z_S$ (stored in the variables `SURFACE_DEPTH_LE/AST`) includes measurements of:
+$\eta$ (stored in the variables `SURFACE_DEPTH_LE/AST`) includes measurements of:
 
 - *In open water*: The position of the water surface (should be close to zero on average, but may vary due to waves).
 - *In sea ice*: The sea ice draft (vertical distance between  the water surface and the bottom of the sea ice).
 
-Sea ice draft (variables `SEA_ICE_DRAFT_LE/AST`) is equal to $z_S$, but only includes measurements from samples where ice-presence was detected (using the FOM criterion in all four beams). $z_S$ from any open-water or mixed measurements is set to NaN.
+Sea ice draft (variables `SEA_ICE_DRAFT_LE/AST`) is equal to $\eta$, but only includes measurements from samples where ice-presence was detected (using the FOM criterion in all four beams). Sea ice draft from any open-water or mixed measurements is set to NaN.
 
 In addition, any sea ice draft estimates with values < 30 cm are considered erroneous and removed (set to NaN).
 
@@ -165,15 +175,13 @@ Sea ice draft variables (`SEA_ICE_DRAFT_LE/AST`) are computed for each sample an
 </p>
 </details>
 
-
 ___
 
 <details>
 <summary><b>7. Filter LE distances to reject false near-transducer ice keels </b> <i>(automatic within #6)</i></summary>
 <p>
 
-
-In the LE distance data (`Average_AltimeterDistanceLE`), we typically observe a large number distances that are clearly in the water column between the transducer and the ice or ocean surface, resulting in a broad peak within 0-10 m of the transducer head. This near-transducer peak (referred to here as "false keels") is typically not present in AST distances.
+In the LE distance data (`Average_AltimeterDistanceLE`), we typically observe a large fraction of measurements that are clearly in the water column between the transducer and the ice or ocean surface, resulting in a broad peak within 0-10 m of the transducer head. This near-transducer peak (referred to here as "false keels") is typically not present in AST distances.
 
 <a href="../_static/proc_images/AST_LE_histograms.png" target="_blank">
     <img src="../_static/proc_images/AST_LE_histograms.png" width="200" height="120" alt="Example of distribution of LE and AST distances">
@@ -188,7 +196,7 @@ This provides an effective filter of false ice keels from the LE dataset.
  using the `LE_AST_max_sep` parameter in  `icedraft.calculate_draft()`.
 
 In many instances, this may result in removing quite large parts of the LE distances in the datasets. For example,
-in datasets from Sig500s mounted near 20 m depth in th northwestern Barents Sea, this reduces the amount of valid LE measurements by 1/4 to 1/3.
+in datasets from Sig500s mounted near 20 m depth in the northwestern Barents Sea, this reduces the amount of valid LE measurements by 1/4 to 1/3.
 
 
 
@@ -199,26 +207,42 @@ in datasets from Sig500s mounted near 20 m depth in th northwestern Barents Sea,
 ___
 
 <details>
-<summary><b>8. Get open water corrections</b></summary>
+<summary><b>8. Calculate empirical open water corrections</b></summary>
 <p>
+
+To obtain the final sea ice draft estimates, we make empirical correction to $\eta$. The corrections compensate for
+
+1. Errors in depth as a result of errors in the pressure reading.
+    - Sources of error:
+      - Accuracy of pressure sensor (0.1% of Signature pressure rating)
+      - Possible temperature effects on the piezoelectric pressure sensor in cold waters
+      - Errors in density $\rho$ (typically less significant)
+    - Pressure errors are largely compensated for by the fixed offset coefficient $\alpha_{OW}$. This coefficient is typically on the order of 10 to 20 cm.
+2. Errors in sound speed.
+
+   While the algorithm does compensate for changes in water sound speed, we have (at best) information about the sound speed at a single fixed location. Sound speed may change above the instrument, e.g. as a result of surface heating/cooling/freshening.
+
+   - This error often has a seasonal cycle as the mean sound speed of the above-instrument waters change seasonally.
+   - Seasonal sound speed variations are typically compensated for by the time-varying factor coefficient $\beta_{OW}$.
+
 
 We want to find one or both coefficients $\alpha_{OW}, \beta_{OW}$ to correct the altimeter distance so that the **mean value of open-water measurements is near zero**.
 
-1. The "open water surface depth" $\eta$ is found ($\eta=D - S_v$ for samples classified as *open water*).
-2. A low-passed filtered (default: daily) time series of $\eta$ ($\eta_{LP}$) is produced by:
+1. The "open water surface depth" $\eta_O$ is found ($\eta_O=D - S_v$ for samples classified as *open water*).
+2. A low-passed filtered (default: daily) time series of $\eta_O$ ($\eta_{O, LP}$) is produced by:
     - Filtering out outliers (reject outliers > 15 cm from deployment median)
     - Computing ensemble medians
     - Computing daily means from these, only including days with >2.5% open water ensembles.
     - Linearly interpolate to get a continuous daily time series.
     - (Smoothe with a running mean if we want to use a coarser time scale.)
-3. The fixed offset correction $\alpha_{OW}$ is taken as the mean of $\eta_{LP}$.
+3. The fixed offset correction $\alpha_{OW}$ is taken as the mean of $\eta_{O, LP}$.
 4. The time-varying factor correction $\beta_{OW}$ is calculated so that the low-pass filtered open water surface (after applying $\alpha_{OW}$) is zero:
 
-> $\beta_{OW}(t) = (D_{LP}(t) - \alpha_{OW}) / (D_{LP}(t) - \eta_{LP}(t))$
+> $\beta_{OW}(t) = (D_{LP}(t) - \alpha_{OW}) / (D_{LP}(t) - \eta_{O, LP}(t))$
 
-..which is equivalent to the following holding over the LP time scale:
+..which is equivalent to the following holding over the LP time scale for open-water samples:
 
->$\beta_{OW} S_v + \alpha_{OW} = D$
+>$\beta_{OW} S_v + \alpha_{OW} \approx D$
 
 
 </p>
@@ -236,9 +260,10 @@ ___
 - Recalculate sea ice draft with the same formula as before, but now using the
   empirically derived values for $\alpha_{OW}, \beta_{OW}$:
 
-> $z_S = D -$ `Average_AltimeterDistance`$
+> $\eta = D -$ `Average_AltimeterDistance`$
 \cdot \cos \theta \cdot c_{S, OBS}$/`Average_Soundspeed`$\cdot \beta_{OW}- \alpha_{OW}$
 
+- Again, sea ice draft is taken as equal to $\eta$ when ice is present, and NaN otherwise.
 </p>
 </details>
 
@@ -334,47 +359,3 @@ ___
 ___
 ___
 ___
-
-
-### Note: sources of error
-
-
-
-**Sources of error** include:
-
-- Erroneous effective sound speed along the acoustic travel path because T and S above the sensor may be *lower* than measured at the Sig500.
-
-    - *Example*:
-    - Meltwater layer above the sensor where T, S is lower
-    - -> True sound speed is lower than estimated.
-    - -> True travel distance is shorter than estimated.
-    - -> True ice draft is deeper than estimated.
-    - **NOTE: Doe BOE calculation here!!**
-
-- Erroneous instrument pressure
-    - From [specs](https://www.nortekgroup.com/products/signature-500/pdf): Error is 0.1% of full scale
-    - At 20 dbar, this should give an error of ~2 cm. This could give an error up to 4 cm in the travel distance.
-
-- Erroneous atmospheric pressure
-    - Could be errors, but we don't expect a *bias* in one direction or another..
-    - A 30hPa error (equivalent to the atmo pressure being *totally* wrong) could give an error of 30 cm.
-
-- Erroneous *g*
-
-
-- Erroneous instrument tilt
-    - From [specs](https://www.nortekgroup.com/products/signature-500/pdf): Error is 2 degrees
-    - The associated error in the cos term should be            negligible  (~0.06%)
-
-- Refectors before the surface?
-
-    - Bubbles or similar..
-    - Algorithm setting distance *at* point rather than in between
-
-
-
-___
-
-### To do:
-
-- Grab any useful metadata atthe loading stage!
