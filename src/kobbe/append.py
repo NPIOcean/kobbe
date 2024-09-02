@@ -608,16 +608,21 @@ def _add_SIC_FOM(
 
     # Initialize boolean arrays for ice detection
     try:
-        ALL_ICE_IN_SAMPLE = np.ones([ds.sizes["TIME"], ds.sizes["SAMPLE"]],
-                                    dtype=bool)
-        ALL_WATER_IN_SAMPLE = np.ones([ds.sizes["TIME"], ds.sizes["SAMPLE"]],
-                                      dtype=bool)
-
-        for nn in range(1, 5):
-            FOMnm = f"AverageIce_FOMBeam{nn}"
-            ALL_WATER_IN_SAMPLE &= ds[FOMnm].data > FOM_thr
-            ALL_ICE_IN_SAMPLE &= ds[FOMnm].data < FOM_thr
+        if 'SAMPLE' in ds.dims:
+            ALL_ICE_IN_SAMPLE = np.ones(
+                [ds.sizes["TIME"], ds.sizes["SAMPLE"]], dtype=bool)
+            ALL_WATER_IN_SAMPLE = np.ones(
+                [ds.sizes["TIME"], ds.sizes["SAMPLE"]], dtype=bool)
+            for nn in range(1, 5):
+                FOMnm = f"AverageIce_FOMBeam{nn}"
+                ALL_WATER_IN_SAMPLE &= ds[FOMnm].data > FOM_thr
+                ALL_ICE_IN_SAMPLE &= ds[FOMnm].data < FOM_thr
+        else:
+            print('Working with non-reshaped dataset '
+                  '-> Not calculating ice presence')
+            return ds
     except KeyError as e:
+        FOMnm = "AverageIce_FOMBeam[1-4]"
         raise KeyError(
             f"Required FOM variable {FOMnm} is missing in the Dataset."
             ) from e

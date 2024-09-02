@@ -37,6 +37,7 @@ def matfiles_to_dataset(
     lon: Optional[float] = None,
     include_raw_altimeter: bool = False,
     FOM_ice_threshold: float = 1e4,
+    time_threshold_min: Union[bool, float] = None,
     time_range: Optional[Tuple[Optional[str], Optional[str]]] = None,
 ) -> xr.Dataset:
     """
@@ -63,6 +64,13 @@ def matfiles_to_dataset(
     FOM_ice_threshold : float, optional
         Threshold for "Figure of Merit" in the ice ADCP pings used to separate
         measurements in ice from measurements of water. Default is 1e4.
+    time_threshold_min : Union[bool, float]
+        Time difference (minutes) between samples used to identify individual
+        ensembles when reshaping.
+        If manually specifying this parameter, set it somewhere between the
+        sampling frequency within an enseble (e.g. 1/60 minutes) and the time
+        between ensebles (e.g. 15 minutes).
+        If None (default), the parameter will be automatically deduced.
     time_range : Optional[Tuple[Optional[str], Optional[str]]], optional
         Only accept data within this date range. Provide a tuple of date
         trings in 'DD.MM.YYYY' format.
@@ -165,7 +173,7 @@ def matfiles_to_dataset(
 
     # Reshape
     if reshape:
-        ds = _reshape_ensembles(ds)
+        ds = _reshape_ensembles(ds, time_threshold_min=time_threshold_min)
 
     # Grab the (de facto) sampling rate
     ds.attrs["sampling_interval_sec"] = np.round(
@@ -394,21 +402,27 @@ def overview(ds: xr.Dataset) -> None:
 
 
 def _reshape_ensembles(
-        ds: xr.Dataset, time_threshold_min: float = 7.0) -> xr.Dataset:
+        ds: xr.Dataset,
+        time_threshold_min: Union[bool, float] = None) -> xr.Dataset:
     """
     Reshape a dataset from a single 'time_average' dimension to 2D ('TIME',
     'SAMPLE'), where 'TIME' represents the mean time of each ensemble and
     'SAMPLE' represents each sample within the ensemble.
 
+    If `time_threshold_min` is not provided, it will be automatically
+    determined by estimating the time separation between sample intervals and
+    ensemble intervals.
+
     Parameters
     ----------
     ds : xr.Dataset
         The xarray Dataset to reshape. It should have the following dimensions:
-        - time_average: The dimension to be reshaped
-        - Optional dimensions: BINS, xyz, beams
-    time_threshold_min : float, optional
+        - time_average: The dimension to be reshaped.
+        - Optional dimensions: BINS, xyz, beams.
+    time_threshold_min : Union[bool, float], optional
         The time jump threshold between ensembles in minutes to determine the
-        start and end of ensembles. Default is 7.0 minutes.
+        start and end of ensembles. If not provided, a threshold will be
+        automatically estimated using the `_guess_time_separation` function.
 
     Returns
     -------
@@ -419,6 +433,10 @@ def _reshape_ensembles(
     # Check for required dimension
     if "time_average" not in ds.dims:
         raise ValueError("Dataset must contain the 'time_average' dimension.")
+
+    # Automatically set the time_threshold_min if not specified
+    if time_threshold_min is None:
+        time_threshold_min = _guess_time_separation(ds)
 
     ###########################################################################
     # ADD A "TIME" COORDINATE (ONE ENTRY PER ENSEMBLE)
@@ -916,3 +934,38 @@ def to_nc(
         dsc[varlist].to_netcdf(file_path)
         if verbose:
             print(f"Saved data to file:\n{file_path}")
+
+
+def _guess_time_separation(ds: xr.Dataset) -> float:
+    """
+    Guess a time interval (in minutes) that can be used to separate sample
+    intervals from ensemble intervals.
+
+    This function estimates a threshold time difference that can distinguish
+    between the frequent small intervals (e.g., between consecutive samples)
+    and the larger intervals (e.g., between different ensembles).
+
+    Parameters:
+    -----------
+    ds : xr.Dataset
+        The dataset containing a `time_average` data variable with time
+        values.
+
+    Returns:
+    --------
+    float
+        An estimated time interval (in minutes) used as a threshold to
+        separate sample intervals from ensemble intervals.
+    """
+    time_average_data = ds.time_average.data
+    # Convert time differences to minutes
+    time_diff_min = np.diff(time_average_data) * 24 * 60
+    # Estimate small intervals (e.g., sampling intervals)
+    dt_sample_guess_min = np.quantile(time_diff_min, 0.001)
+    # Estimate large intervals (e.g., ensemble intervals)
+    dt_ensemble_guess_min = np.quantile(time_diff_min, 0.999)
+    # Midpoint for separation
+    dt_between_guess_min = 0.5 * (dt_ensemble_guess_min
+                                  + dt_sample_guess_min)
+
+    return np.round(dt_between_guess_min, 2)
