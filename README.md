@@ -19,5 +19,7 @@ ADCPs.
 Designed for applications where the instrument is deployed looking upward below
 the ocean surface.
 
+
 ![](docs/images/logos_illustrations/sea_ice_illustration.png)
 
+Supported by the project [HiAOOS](https://hiaoos.eu/).
