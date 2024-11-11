@@ -56,8 +56,9 @@ def add_to_sigdata(
         (default), the time is assumed to be in Python default epoch or
         standard datetime format.
     extrapolate : bool, optional
-        If True, values will be linearly extrapolated outside the range of the
-        input data. By default, extrapolate is set to False.
+        If True, values will be extrapolated outside the range of the input
+        data by simply extending the edge values. By default, extrapolate is
+        set to False.
     interpolate_input: If True, the function will interpolate over gaps in the
                        input data.
 
@@ -86,7 +87,11 @@ def add_to_sigdata(
 
     interp1d_kws = {"bounds_error": False}
     if extrapolate:
-        interp1d_kws["fill_value"] = "extrapolate"
+
+        first_value = data[~np.isnan(data)][0]
+        last_value = data[~np.isnan(data)][-1]
+
+        interp1d_kws["fill_value"] = (first_value, last_value)
 
     # Interpolatant of the time series
     if interpolate_input:  # Ignore NaNs if "interpolate_input"
@@ -162,15 +167,15 @@ def append_ctd(
         raise Exception('No lat/lon found in the dataset (required for CTD'
                         ' calculations. Add with kobbe.append.set_lat_lon.')
 
-    # Convert practical salinity to absolute salinitysty to absolute salinity
-    SA = gsw.SA_from_SP(sal, pres, ds.LONGITUDE.data, ds.LATITUDE.data)
+    # Convert practical salinity to absolute salinity to absolute salinity
+    SA = gsw.SA_from_SP(SP=sal, p=pres, lon=ds.LONGITUDE.data, lat=ds.LATITUDE.data)
 
     # Convert in-situ temperature to conservative temperature
-    CT = gsw.CT_from_t(SA, temp, pres)
+    CT = gsw.CT_from_t(SA=SA, t=temp, p=pres)
 
     # Compute sound speed and density
-    ss = gsw.sound_speed(SA, CT, pres)
-    rho = gsw.rho(SA, CT, pres)
+    ss = gsw.sound_speed(SA=SA, CT=CT, p=pres)
+    rho = gsw.rho(SA=SA, CT=CT, p=pres)
 
     # Define shared attributes
     attrs_all = {
