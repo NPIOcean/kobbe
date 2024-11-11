@@ -16,9 +16,8 @@ import xarray as xr
 from matplotlib.dates import num2date, date2num
 import matplotlib.pyplot as plt
 from kval.util.time import matlab_time_to_python_time
-from kobbe.append import _add_tilt, _add_SIC_FOM, set_lat, set_lon
+from kobbe.append import _add_tilt, _add_SIC_FOM, set_lat_lon
 from datetime import datetime
-import warnings
 import os
 import glob2
 from typing import List, Optional, Tuple, Union, Dict, Any
@@ -90,7 +89,7 @@ def matfiles_to_dataset(
     -----
     The function assumes that the provided .mat files are structured in a way
     that can be handled by the internal `_matfile_to_dataset`, `_add_tilt`,
-    `_reshape_ensembles`, `set_lat`, `set_lon`, and `_add_SIC_FOM` functions.
+    `_reshape_ensembles`, `set_lat_lon`, and `_add_SIC_FOM` functions.
     """
 
     # Convert directory input to a list of .mat files
@@ -181,8 +180,7 @@ def matfiles_to_dataset(
     )
 
     # Add some attributes
-    ds = set_lat(ds, lat)
-    ds = set_lon(ds, lon)
+    ds = set_lat_lon(ds, lat= lat, lon= lon)
 
     # Add FOM threshold
     ds["FOM_threshold"] = (
@@ -849,7 +847,8 @@ def _make_instrument_var(ds: xr.Dataset) -> xr.Dataset:
     information.
     '''
 
-    ds['INSTRUMENT'] = ((), ())
+    ds['INSTRUMENT'] = xr.DataArray(
+        data=None, dims=[],)
     ds['INSTRUMENT'].attrs = {
         'long_name': ('Empty variable with metadata fields containing '
                       'information about the instrument configuration.'),
@@ -875,106 +874,6 @@ def _make_instrument_var(ds: xr.Dataset) -> xr.Dataset:
 
     return ds
 
-##############################################################################
-
-def to_nc(
-    ds: xr.Dataset,
-    file_path: str,
-    export_vars: Optional[List[str]] = None,
-    icedraft: bool = True,
-    icevel: bool = True,
-    oceanvel: bool = False,
-    all: bool = False,
-    include_INSTRUMENT: bool = True,
-    verbose: bool = True,
-) -> Optional[None]:
-    """
-    Export a Dataset to a netCDF file.
-
-    Parameters
-    ----------
-    ds : xr.Dataset
-        The xarray Dataset to export.
-    file_path : str
-        The file path for the output netCDF file.
-    export_vars : Optional[List[str]], optional
-        A list of variables to include in the exported netCDF file.
-        Default is an empty list.
-    icedraft : bool, optional
-        If True, include sea ice draft estimates in the export.
-        Default is True.
-    icevel : bool, optional
-        If True, include sea ice drift velocities in the export.
-        Default is True.
-    oceanvel : bool, optional
-        If True, include ocean velocities in the export. Default is False.
-    all : bool, optional
-        If True, include all variables from the Dataset in the export.
-        Default is False.
-    include_INSTRUMENT: bool, optional
-        Include the INSTRUMENT variable containing sampling/instrument info.
-    verbose: bool, optional
-        Whether to print a little statement after successful save.
-        Default is True.
-
-    Returns
-    -------
-    Optional[None]
-        Returns None if the function completes successfully or if no variables
-        are selected for export.
-
-    Raises
-    ------
-    UserWarning
-        If a specified variable in `export_vars` is not found in the Dataset.
-    """
-
-    dsc = ds.copy()
-
-    if all:
-        print("Saving *ALL* variables..")
-        dsc.to_netcdf(file_path)
-        print(f"Saved data to file:\n{file_path}")
-    else:
-        varlist = export_vars.copy() if export_vars else []
-        if icedraft:
-            varlist += [
-                "SEA_ICE_DRAFT_LE",
-                "SEA_ICE_DRAFT_MEDIAN_LE",
-                "SEA_ICE_DRAFT_AST",
-                "SEA_ICE_DRAFT_MEDIAN_AST",
-            ]
-        if icevel:
-            varlist += ["uice", "vice", "Uice", "Vice"]
-        if oceanvel:
-            varlist += ["uocean", "vocean", "Uocean", "Vocean"]
-
-        # Remove duplicates
-        varlist = list(np.unique(np.array(varlist)))
-
-        # Remove variables not in ds
-        for varnm_ in varlist.copy():
-            if varnm_ not in dsc.variables:
-                varlist.remove(varnm_)
-                if export_vars and varnm_ in export_vars:
-                    warnings.warn(
-                        f"No field '{varnm_}' found in the data "
-                        "(exporting file without it). Check spelling?"
-                    )
-
-        # If varlist is empty: Print a note and exit
-        if not varlist:
-            print("No existing variables selected -> Not exporting anything.")
-            return None
-
-        # Delete some none-useful attributes
-        for attr_not_useful in ["pressure_offset"]:
-            del dsc.attrs[attr_not_useful]
-
-        # Saving
-        dsc[varlist].to_netcdf(file_path)
-        if verbose:
-            print(f"Saved data to file:\n{file_path}")
 
 ##############################################################################
 

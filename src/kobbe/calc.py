@@ -49,7 +49,7 @@ def dep_from_p(
     )
 
     # CALCULATE ABSOLUTE PRESSURE
-    p_abs = ds.Average_AltimeterPressure + ds.pressure_offset
+    p_abs = ds.Average_AltimeterPressure + ds.INSTRUMENT.pressure_offset
 
     # CALCULATE OCEAN PRESSURE
     # Raising issues if we cannot find p_atmo (predefined atmospheric pressure)
@@ -85,21 +85,22 @@ def dep_from_p(
         note_str += (
             "\n- !!! NO TIME_VARYING ATMOSPHERIC CORRECTION APPLIED"
             "  !!!\n (using default atmospheric pressure offset "
-            f"{ds.pressure_offset:.2f} db)"
+            f"{ds.INSTRUMENT.pressure_offset:.2f} db)"
         )
 
     # CALCULATE GRAVITATIONAL ACCELERATION
-    if ds.lat is None:
+    if ds.LATITUDE is None:
         raise Exception(
-            'No "lat" field in the dataset. Add one using'
-            " sig_append.set_lat() and try again."
+            'No "LATITUDE" field in the dataset. Add one using'
+            " sig_append.set_lat_lon() and try again."
         )
 
-    g = gsw.grav(ds.lat.data, 0)
+    g = gsw.grav(ds.LATITUDE.data, 0)
     ds["g"] = (
         (), g,
         {"units": "ms-2",
-         "note": f"Calculated using gsw.grav() for p=0 and lat={ds.lat:.2f}",
+         "note": ("Calculated using gsw.grav() for p=0"
+                  f" and lat={ds.LATITUDE:.2f}"),
          },
     )
     note_str += f"\n- Using g={g:.4f} ms-2 (calculated using gsw.grav())"

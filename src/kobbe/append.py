@@ -158,12 +158,12 @@ def append_ctd(
         onto the signature data time grid.
     """
 
-    if 'lat' not in ds and 'lon' not in ds:
+    if 'LATITUDE' not in ds and 'LONGITUDE' not in ds:
         raise Exception('No lat/lon found in the dataset (required for CTD'
-                        ' calculations. Add with kobbe.append.set_lat/_lon.')
+                        ' calculations. Add with kobbe.append.set_lat_lon.')
 
     # Convert practical salinity to absolute salinitysty to absolute salinity
-    SA = gsw.SA_from_SP(sal, pres, ds.lon.data, ds.lat.data)
+    SA = gsw.SA_from_SP(sal, pres, ds.LONGITUDE.data, ds.LATITUDE.data)
 
     # Convert in-situ temperature to conservative temperature
     CT = gsw.CT_from_t(SA, temp, pres)
@@ -248,14 +248,16 @@ def append_atm_pres_auto(
     ds: The xarray dataset including the SLP variable.
     """
 
-    if 'lat' not in ds or 'lon' not in ds:
+    if 'LATITUDE' not in ds or 'LONGITUDE' not in ds:
         raise Exception(
-            "['lat', 'lon'] not found in dataset. Run append.set_lat first..")
+            "['LATITUDE', 'LONGITUDE'] not found in dataset. "
+            "Run append.set_lat_lon first..")
 
-    ds_slp = get_era5_time_series_point('SLP', 'hourly',
-                                        ds.lat.copy(), ds.lon.copy(),
-                                        ds.TIME[0].item()-1,
-                                        ds.TIME[-1].item()+1)
+    ds_slp = get_era5_time_series_point(
+                'SLP', 'hourly',
+                ds.LATITUDE.copy(), ds.LONGITUDE.copy(),
+                ds.TIME[0].item()-1,
+                ds.TIME[-1].item()+1)
 
     # Define default attributes and update with any provided attributes
     attrs_all = {"long_name": "Sea level pressure", "units": "dbar",
@@ -349,12 +351,13 @@ def append_magdec_auto(
         2014-2015 and 2019-2020.
     '''
 
-    if 'lat' not in ds or 'lon' not in ds:
+    if 'LATITUDE' not in ds or 'LONGITUDE' not in ds:
         raise Exception(
-            "['lat', 'lon'] not found in dataset. Run append.set_lat first..")
+            "['LATITUDE', 'LONGITUDE'] not found in dataset. "
+            "Run append.set_lat_lon first..")
 
     dec = get_declination(
-        dates=ds.TIME.values, lat=ds.lat, lon=ds.lon, model=model)
+        dates=ds.TIME.values, lat=ds.LATITUDE, lon=ds.LONGITUDE, model=model)
 
     attrs = {'note':
              'Time-varying magnetic declination angle from the World Magnetic'
@@ -442,7 +445,7 @@ def append_magdec(
     return ds
 
 
-def set_lat(ds: xr.Dataset, lat: float) -> xr.Dataset:
+def set_lat_lon(ds: xr.Dataset, lat: float, lon: float) -> xr.Dataset:
     """
     Append a single latitude value to a Signature xarray Dataset.
 
@@ -458,28 +461,13 @@ def set_lat(ds: xr.Dataset, lat: float) -> xr.Dataset:
     xr.Dataset
         The xarray Dataset with the added latitude variable (`lat`).
     """
-    ds["lat"] = ((), lat, {"long_name": "Latitude", "units": "degrees_north"})
+    ds["LATITUDE"] = ((), lat,
+                      {"long_name": "Latitude", "units": "degrees_north"})
+    ds["LONGITUDE"] = ((), lon,
+                       {"long_name": "Longitude", "units": "degrees_east"})
+
     return ds
 
-
-def set_lon(ds: xr.Dataset, lon: float) -> xr.Dataset:
-    """
-    Append a single longitude value to a Signature xarray Dataset.
-
-    Parameters
-    ----------
-    ds : xr.Dataset
-        The xarray Dataset to which the longitude will be added.
-    lon : float
-        Longitude in degrees east.
-
-    Returns
-    -------
-    xr.Dataset
-        The xarray Dataset with the added longitude variable (`lon`).
-    """
-    ds["lon"] = ((), lon, {"long_name": "Longitude", "units": "degrees_east"})
-    return ds
 
 ##############################################################################
 

@@ -80,29 +80,29 @@ def _calculate_uvice_avg(
     Returns:
     --------
     xarray.Dataset
-        Updated dataset with 'Uice' and 'Vice' fields added.
+        Updated dataset with 'UICE' and 'VICE' fields added.
     """
 
     if avg_method == "median":
-        ds["Uice"] = ds["uice"].median(dim="SAMPLE")
-        ds["Vice"] = ds["vice"].median(dim="SAMPLE")
+        ds["UICE"] = ds["uice"].median(dim="SAMPLE")
+        ds["VICE"] = ds["vice"].median(dim="SAMPLE")
 
     elif avg_method == "mean":
-        ds["Uice"] = ds["uice"].mean(dim="SAMPLE")
-        ds["Vice"] = ds["vice"].mean(dim="SAMPLE")
+        ds["UICE"] = ds["uice"].mean(dim="SAMPLE")
+        ds["VICE"] = ds["vice"].mean(dim="SAMPLE")
     else:
         raise Exception(
             f'Invalid "avg_method" ("{avg_method}").'
             ' Must be "mean" or "median".'
         )
 
-    ds.Uice.attrs = {
+    ds.UICE.attrs = {
         "units": "m s-1",
         "long_name": "Eastward sea ice drift velocity",
         "details": "Ensemble average (%s)" % avg_method,
         "processing_history": ds.uice.processing_history,
     }
-    ds.Vice.attrs = {
+    ds.VICE.attrs = {
         "units": "m s-1",
         "long_name": "Northward sea ice drift velocity",
         "details": "Ensemble average (%s)" % avg_method,
@@ -114,16 +114,16 @@ def _calculate_uvice_avg(
         warnings.filterwarnings(
             action="ignore", message="Degrees of freedom <= 0 for slice"
         )
-        ds["Uice_SD"] = ds["uice"].std(dim="SAMPLE", skipna=True)
-        ds["Vice_SD"] = ds["vice"].std(dim="SAMPLE", skipna=True)
+        ds["UICE_SD"] = ds["uice"].std(dim="SAMPLE", skipna=True)
+        ds["VICE_SD"] = ds["vice"].std(dim="SAMPLE", skipna=True)
 
-    ds.Uice_SD.attrs = {
+    ds.UICE_SD.attrs = {
         "units": "m s-1",
         "long_name": (
             "Ensemble standard deviation of " "eastward sea ice drift velocity"
         ),
     }
-    ds.Vice_SD.attrs = {
+    ds.VICE_SD.attrs = {
         "units": "m s-1",
         "long_name": (
             "Ensemble standard deviation of "
@@ -497,7 +497,7 @@ def rotate_vels_magdec(ds: xr.Dataset) -> xr.Dataset:
         ("uice", "vice"),
         ("uocean", "vocean"),
     ]  #
-    #  ('Uice', 'Vice'), ('Uocean', 'Vocean')]
+    #  ('UICE', 'VICE'), ('Uocean', 'Vocean')]
 
     uvstrs = ""
 

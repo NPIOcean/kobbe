@@ -11,137 +11,6 @@ import matplotlib.pyplot as plt
 from kval.ocean import uv
 import xarray as xr
 
-
-def plot_ellipse_icevel(
-    ds,
-    lp_days: int = 5,
-    ax: Optional[plt.Axes] = None,
-    return_ax: bool = True
-) -> Optional[plt.Axes]:
-    """
-    Plot of ice drift components (u and v) low pass filtered with a running
-    mean of *lp_days*.
-
-    Showing the mean current vector, the low-pass-filtered and subsampled
-    currents, and the semi-major and -minor axes of the variance ellipse. Args:
-        ds: xarray.Dataset
-            The dataset containing ice drift data, specifically "Uice" and
-            "Vice" fields.
-        lp_days (int, optional):
-            The number of days over which to apply the low-pass filter. Default
-            is 5 days.
-        ax (matplotlib.axes.Axes, optional):
-            An existing matplotlib Axes to plot on. If None, a new figure and
-            axes are created.
-        return_ax (bool, optional):
-            If True, returns the matplotlib Axes object used for the plot.
-            Default is True.
-
-    Returns:
-        Optional[plt.Axes]: The Axes object containing the plot if `return_ax`
-        is True, otherwise None.
-
-    Raises:
-        AssertionError: If the dataset does not have the required "Uice" field.
-
-    Example:
-        >>> ds = xr.Dataset({"Uice": ..., "Vice": ...})
-        >>> plot_ellipse_icevel(ds, lp_days=3)
-    """
-
-    assert hasattr(ds, "Uice"), ('No "Uice" field. Run '
-                                 'vel.calculate_drift()..')
-
-    print("ELLIPSE PLOT: Interpolate over nans.. \r", end="")
-
-    uip = ds.Uice.interpolate_na(dim="TIME", limit=10).data
-    vip = ds.Vice.interpolate_na(dim="TIME", limit=10).data
-
-    print("ELLIPSE PLOT: Low pass filtering..    \r", end="")
-    # LPFed
-    wlen = int(np.round(lp_days / (ds.sampling_interval_sec / 60 / 60 / 24)))
-    ULP = np.convolve(uip, np.ones(wlen) / wlen, mode="valid")[::wlen]
-    VLP = np.convolve(vip, np.ones(wlen) / wlen, mode="valid")[::wlen]
-
-    print("ELLIPSE PLOT: Calculating ellipse (from LPed data).. \r", end="")
-
-    # Ellipse
-    thp, majax, minax = uv.principal_angle(
-        ULP - np.nanmean(ULP), VLP - np.nanmean(VLP))
-
-    # Mean
-    UM, VM = np.nanmean(ULP), np.nanmean(VLP)
-
-    print("ELLIPSE PLOT: Plotting..                              \r", end="")
-
-    if ax is None:
-        fig, ax = plt.subplots(figsize=(10, 10))
-
-    ax.set_aspect("equal")
-
-    ax.plot(uip, vip, ".", ms=1, color="Grey", alpha=0.3, lw=2, zorder=0)
-    ax.plot(
-        ds.Uice.data[-1],
-        ds.Vice.data[-1],
-        ".",
-        ms=1,
-        color="k",
-        alpha=0.5,
-        lw=2,
-        label="Full",
-    )
-
-    ax.plot(ULP, VLP, ".", ms=3, color="b", alpha=0.5)
-    ax.plot(
-        ULP[0],
-        VLP[0],
-        ".",
-        ms=5,
-        color="b",
-        alpha=0.5,
-        label="%.1f-day means" % (lp_days),
-        zorder=0,
-    )
-
-    vmaj = np.array([-majax * np.sin(thp), majax * np.sin(thp)])
-    umaj = np.array([-majax * np.cos(thp), majax * np.cos(thp)])
-    vmin = np.array([-minax * np.sin(thp + np.pi / 2),
-                     minax * np.sin(thp + np.pi / 2)])
-    umin = np.array([-minax * np.cos(thp + np.pi / 2),
-                     minax * np.cos(thp + np.pi / 2)])
-
-    ax.plot(UM + umaj, VM + vmaj, "-k", lw=2, label="Maj axis")
-    ax.plot(UM + umin, VM + vmin, "--k", lw=2, label="Min axis")
-
-    ax.quiver(
-        0,
-        0,
-        UM,
-        VM,
-        color="r",
-        scale_units="xy",
-        scale=1,
-        width=0.03,
-        headlength=2,
-        headaxislength=2,
-        alpha=0.6,
-        label=f"Mean (u: {UM:.2f}, v: {VM:.2f})",
-        edgecolor="k",
-        linewidth=0.6,
-    )
-
-    ax.set_ylabel("v [m s$^{-1}$]")
-    ax.set_xlabel("u [m s$^{-1}$]")
-    ax.legend(fontsize=10, loc=3, handlelength=1, ncol=2)
-
-    ax.set_title("Ice drift velocity components")
-    ax.grid()
-    plt.show()
-
-    if return_ax:
-        return ax
-
-
 def histogram(
     ds: xr.Dataset,
     varnm: str,
@@ -280,3 +149,134 @@ def histogram(
 
     if return_figure:
         return fig
+
+
+def plot_ellipse_icevel(
+    ds,
+    lp_days: int = 5,
+    ax: Optional[plt.Axes] = None,
+    return_ax: bool = True
+) -> Optional[plt.Axes]:
+    """
+    Plot of ice drift components (u and v) low pass filtered with a running
+    mean of *lp_days*.
+
+    Showing the mean current vector, the low-pass-filtered and subsampled
+    currents, and the semi-major and -minor axes of the variance ellipse. Args:
+        ds: xarray.Dataset
+            The dataset containing ice drift data, specifically "UICE" and
+            "VICE" fields.
+        lp_days (int, optional):
+            The number of days over which to apply the low-pass filter. Default
+            is 5 days.
+        ax (matplotlib.axes.Axes, optional):
+            An existing matplotlib Axes to plot on. If None, a new figure and
+            axes are created.
+        return_ax (bool, optional):
+            If True, returns the matplotlib Axes object used for the plot.
+            Default is True.
+
+    Returns:
+        Optional[plt.Axes]: The Axes object containing the plot if `return_ax`
+        is True, otherwise None.
+
+    Raises:
+        AssertionError: If the dataset does not have the required "UICE" field.
+
+    Example:
+        >>> ds = xr.Dataset({"UICE": ..., "VICE": ...})
+        >>> plot_ellipse_icevel(ds, lp_days=3)
+    """
+
+    assert hasattr(ds, "UICE"), ('No "UICE" field. Run '
+                                 'vel.calculate_drift()..')
+
+    print("ELLIPSE PLOT: Interpolate over nans.. \r", end="")
+
+    uip = ds.UICE.interpolate_na(dim="TIME", limit=10).data
+    vip = ds.VICE.interpolate_na(dim="TIME", limit=10).data
+
+    print("ELLIPSE PLOT: Low pass filtering..    \r", end="")
+    # LPFed
+    wlen = int(np.round(lp_days / (ds.sampling_interval_sec / 60 / 60 / 24)))
+    ULP = np.convolve(uip, np.ones(wlen) / wlen, mode="valid")[::wlen]
+    VLP = np.convolve(vip, np.ones(wlen) / wlen, mode="valid")[::wlen]
+
+    print("ELLIPSE PLOT: Calculating ellipse (from LPed data).. \r", end="")
+
+    # Ellipse
+    thp, majax, minax = uv.principal_angle(
+        ULP - np.nanmean(ULP), VLP - np.nanmean(VLP))
+
+    # Mean
+    UM, VM = np.nanmean(ULP), np.nanmean(VLP)
+
+    print("ELLIPSE PLOT: Plotting..                              \r", end="")
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(10, 10))
+
+    ax.set_aspect("equal")
+
+    ax.plot(uip, vip, ".", ms=1, color="Grey", alpha=0.3, lw=2, zorder=0)
+    ax.plot(
+        ds.UICE.data[-1],
+        ds.VICE.data[-1],
+        ".",
+        ms=1,
+        color="k",
+        alpha=0.5,
+        lw=2,
+        label="Full",
+    )
+
+    ax.plot(ULP, VLP, ".", ms=3, color="b", alpha=0.5)
+    ax.plot(
+        ULP[0],
+        VLP[0],
+        ".",
+        ms=5,
+        color="b",
+        alpha=0.5,
+        label="%.1f-day means" % (lp_days),
+        zorder=0,
+    )
+
+    vmaj = np.array([-majax * np.sin(thp), majax * np.sin(thp)])
+    umaj = np.array([-majax * np.cos(thp), majax * np.cos(thp)])
+    vmin = np.array([-minax * np.sin(thp + np.pi / 2),
+                     minax * np.sin(thp + np.pi / 2)])
+    umin = np.array([-minax * np.cos(thp + np.pi / 2),
+                     minax * np.cos(thp + np.pi / 2)])
+
+    ax.plot(UM + umaj, VM + vmaj, "-k", lw=2, label="Maj axis")
+    ax.plot(UM + umin, VM + vmin, "--k", lw=2, label="Min axis")
+
+    ax.quiver(
+        0,
+        0,
+        UM,
+        VM,
+        color="r",
+        scale_units="xy",
+        scale=1,
+        width=0.03,
+        headlength=2,
+        headaxislength=2,
+        alpha=0.6,
+        label=f"Mean (u: {UM:.2f}, v: {VM:.2f})",
+        edgecolor="k",
+        linewidth=0.6,
+    )
+
+    ax.set_ylabel("v [m s$^{-1}$]")
+    ax.set_xlabel("u [m s$^{-1}$]")
+    ax.legend(fontsize=10, loc=3, handlelength=1, ncol=2)
+
+    ax.set_title("Ice drift velocity components")
+    ax.grid()
+    plt.show()
+
+    if return_ax:
+        return ax
+
