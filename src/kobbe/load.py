@@ -195,6 +195,9 @@ def matfiles_to_dataset(
     # Add sea ice concentration estimate from FOM
     ds = _add_SIC_FOM(ds)
 
+    # Create an INSTRUMENT variable with instrument/sampling information
+    ds = _make_instrument_var(ds)
+
     # Add history attribute
     now_date_str = datetime.now().strftime(
         "%d %b %Y.")
@@ -203,6 +206,8 @@ def matfiles_to_dataset(
     print("Done. Run kobbe.load.overview()) to print some additional details.")
 
     return ds
+
+
 
 ##############################################################################
 
@@ -486,7 +491,7 @@ def _reshape_ensembles(
         ["SAMPLE"],
         np.arange(1, Nsamp_per_ens + 1),
         {
-            "units": "Sample number",
+            "units": "1",
             "long_name": (f"Sample number in ensemble ({Nsamp_per_ens}"
                           f" samples per ensemble)"),
         },
@@ -673,8 +678,8 @@ def _matfile_to_dataset(
     ds_single.attrs["instrument_configuration_details"] = conf_str
 
     # Add some selected attributes that are useful
-    ds_single.attrs["instrument"] = b["conf"]["InstrumentName"]
-    ds_single.attrs["serial_number"] = b["conf"]["SerialNo"]
+    ds_single.attrs["instrument_model"] = 'Nortek ' + b["conf"]["InstrumentName"]
+    ds_single.attrs["instrument_serial_number"] = b["conf"]["SerialNo"]
     ds_single.attrs["samples_per_ensemble"] = int(b["conf"]["Average_NPings"])
     ds_single.attrs["time_between_ensembles_sec"] = int(
         b["conf"]["Plan_ProfileInterval"]
@@ -838,6 +843,39 @@ def _unpack_nested(val: Union[List[Any], np.ndarray]) -> Any:
 
 ##############################################################################
 
+def _make_instrument_var(ds: xr.Dataset) -> xr.Dataset:
+    '''
+    Create an INSTRUMENT variable where we collect instrument and sampling
+    information.
+    '''
+
+    ds['INSTRUMENT'] = ((), ())
+    ds['INSTRUMENT'].attrs = {
+        'long_name': ('Empty variable with metadata fields containing '
+                      'information about the instrument configuration.'),
+                       }
+    global_keys = [
+        'pressure_offset', 'samples_per_ensemble',
+        'sampling_interval_sec', 'time_between_ensembles_sec',]
+
+    ocean_vel_keys = [
+        'blanking_distance_oceanvel', 'cell_size_oceanvel',
+        'N_cells_oceanvel']
+
+    for key in (global_keys + ocean_vel_keys):
+
+        if key in ds.attrs:
+            ds['INSTRUMENT'].attrs[key] = ds.attrs[key]
+            del ds.attrs[key]
+
+    ds['INSTRUMENT'].attrs['instrument_configuration_string'] = (
+        ds.instrument_configuration_details
+    )
+    del ds.attrs['instrument_configuration_details']
+
+    return ds
+
+##############################################################################
 
 def to_nc(
     ds: xr.Dataset,
@@ -847,6 +885,7 @@ def to_nc(
     icevel: bool = True,
     oceanvel: bool = False,
     all: bool = False,
+    include_INSTRUMENT: bool = True,
     verbose: bool = True,
 ) -> Optional[None]:
     """
@@ -872,6 +911,8 @@ def to_nc(
     all : bool, optional
         If True, include all variables from the Dataset in the export.
         Default is False.
+    include_INSTRUMENT: bool, optional
+        Include the INSTRUMENT variable containing sampling/instrument info.
     verbose: bool, optional
         Whether to print a little statement after successful save.
         Default is True.
@@ -935,6 +976,7 @@ def to_nc(
         if verbose:
             print(f"Saved data to file:\n{file_path}")
 
+##############################################################################
 
 def _guess_time_separation(ds: xr.Dataset) -> float:
     """
