@@ -376,7 +376,7 @@ def get_open_water_surface_depth_LP(
 
     # Store filtered, ensemble median, daily averaged, smoothed daily owsd.
     # Also daily time array (td+0.5) of the midpoint of the daily estimates.
-    RS_mean = RS["mean"]
+    RS_mean = RS["median"]
     timestamp_day = time_daily + 0.5
 
     # 6. Forward and backward fill if we have Nans at the start

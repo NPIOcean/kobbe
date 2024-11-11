@@ -467,9 +467,17 @@ def set_lat_lon(ds: xr.Dataset, lat: float, lon: float) -> xr.Dataset:
         The xarray Dataset with the added latitude variable (`lat`).
     """
     ds["LATITUDE"] = ((), lat,
-                      {"long_name": "Latitude", "units": "degrees_north"})
+                      {"long_name": "Latitude",
+                       "standard_name": "latitude",
+                       "units": "degrees_north",
+                       "axis": "Y",
+                       "coverage_content_type": "coordinate"})
     ds["LONGITUDE"] = ((), lon,
-                       {"long_name": "Longitude", "units": "degrees_east"})
+                       {"long_name": "Longitude",
+                        "standard_name": "longitude",
+                        "units": "degrees_east",
+                        "axis": 'X',
+                        "coverage_content_type": "coordinate"})
 
     return ds
 

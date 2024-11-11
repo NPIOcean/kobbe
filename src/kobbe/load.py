@@ -20,6 +20,7 @@ from kobbe.append import _add_tilt, _add_SIC_FOM, set_lat_lon
 from datetime import datetime
 import os
 import glob2
+import warnings
 from typing import List, Optional, Tuple, Union, Dict, Any
 from kval.util import internals
 
@@ -480,14 +481,15 @@ def _reshape_ensembles(
     rsh_coords["TIME"] = (
         ["TIME"],
         t_ens,
-        {
+        {   "standard_name": "time",
             "units": "Days since 1970-01-01",
             "long_name": "Time stamp of the ensemble averaged measurement",
+            "axis": "T",
         },
     )
     rsh_coords["SAMPLE"] = (
         ["SAMPLE"],
-        np.arange(1, Nsamp_per_ens + 1),
+        np.arange(1, Nsamp_per_ens + 1).astype(float),
         {
             "units": "1",
             "long_name": (f"Sample number in ensemble ({Nsamp_per_ens}"
