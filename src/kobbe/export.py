@@ -54,6 +54,12 @@ def _add_global_attrs(ds: xr.Dataset) -> xr.Dataset:
     ds.attrs["platform"] = 'Water-based Platforms>Buoys>Moored>MOORINGS'
     ds.attrs["sensor_mount"] = "mounted_on_mooring_line"
 
+    ds.attrs["instrument"] = (
+        "In Situ/Laboratory Instruments>Profilers/Sounders>Acoustic Sounders>"
+        "UPWARD LOOKING SONAR,"
+        "In Situ/Laboratory Instruments>Profilers/Sounders>Acoustic Sounders>"
+        "ADCP")
+
     if 'declination_correction' in ds.attrs:
         del ds.attrs['declination_correction']
 

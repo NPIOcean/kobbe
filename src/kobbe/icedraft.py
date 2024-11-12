@@ -552,7 +552,6 @@ def compare_open_water_correction(
     # Apply draft calculation to the copy
     ds2 = calculate_draft(ds2, corr_sound_speed_CTD=corr_sound_speed_CTD)
 
-
     print('OPEN WATER CORRECTIONS:')
     print(f"LE: Applied offset alpha: {ds.alpha_LE * 1e2:.1f} cm")
     print(

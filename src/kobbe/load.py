@@ -492,8 +492,8 @@ def _reshape_ensembles(
         np.arange(1, Nsamp_per_ens + 1).astype(float),
         {
             "units": "1",
-            "long_name": (f"Sample number in ensemble ({Nsamp_per_ens}"
-                          f" samples per ensemble)"),
+            "long_name": "Sample number in ensemble",
+            "comment": f"{Nsamp_per_ens} samples per ensemble",
         },
     )
 

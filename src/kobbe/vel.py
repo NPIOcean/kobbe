@@ -2,7 +2,6 @@
 KOBBE.VEL
 
 Functions for processing ocean and sea ice drift velocity.
-
 """
 
 import numpy as np
@@ -13,7 +12,11 @@ from typing import Tuple, Optional
 
 
 def calculate_ice_vel(
-        ds: xr.Dataset, avg_method: str = "median") -> xr.Dataset:
+    ds: xr.Dataset,
+    avg_method: str = "median",
+    sspd_scaling: bool = False,
+    true_sspd_name: str = 'sound_speed_CTD'
+) -> xr.Dataset:
     """
     Calculate sea ice drift velocity from the AverageIce fields.
 
@@ -24,6 +27,12 @@ def calculate_ice_vel(
     avg_method : str, optional
         Method to calculate ensemble average ('median' or 'mean'). Default is
         'median'.
+    sspd_scaling : bool, optional
+        If True, scales the ice velocity by the ratio of actual sound speed to
+        averaged sound speed.
+    true_sspd_name : str, optional
+        The name of the dataset field containing the true sound speed values.
+        Default is 'sound_speed_CTD'.
 
     Returns:
     --------
@@ -31,6 +40,7 @@ def calculate_ice_vel(
         Updated dataset with 'uice' and 'vice' fields added.
     """
 
+    # Add uice and vice fields for eastward and northward sea ice drift velocity
     ds["uice"] = (
         ("TIME", "SAMPLE"),
         ds.AverageIce_VelEast.data,
@@ -50,22 +60,73 @@ def calculate_ice_vel(
         },
     )
 
+    # Mask data where no ice is present
     ds["uice"] = ds["uice"].where(ds.ICE_IN_SAMPLE)
     ds["vice"] = ds["vice"].where(ds.ICE_IN_SAMPLE)
 
+    # Add processing history
     for key in ["uice", "vice"]:
-        ds[key].attrs[
-            "processing_history"
-        ] = "Loaded from AverageIce_VelEast/AverageIce_VelEast fields.\n"
+        ds[key].attrs["processing_history"] = "Loaded from AverageIce_VelEast/AverageIce_VelNorth fields.\n"
 
+    # Perform sound speed scaling if applicable
+    if sspd_scaling:
+        if true_sspd_name in ds:
+            ds = _sspd_correction_ice_vel(ds, true_sspd_name=true_sspd_name)
+        else:
+            print(f"Could not perform sound speed scaling of ice velocity (field '{true_sspd_name}' not found)")
+
+    # Calculate average ice velocity
     ds = _calculate_uvice_avg(ds, avg_method=avg_method)
 
     return ds
 
 
+def _sspd_correction_ice_vel(
+    ds: xr.Dataset,
+    true_sspd_name: str = 'sound_speed_CTD'
+) -> xr.Dataset:
+    """
+    Apply sound speed correction to ice velocity.
+
+    This function scales the ice drift velocity fields ('uice' and 'vice') by the ratio of the true sound speed
+    to the average sound speed in the dataset.
+
+    Parameters:
+    -----------
+    ds : xarray.Dataset
+        The dataset containing the velocity and sound speed data.
+    true_sspd_name : str
+        The name of the dataset field containing the true sound speed values.
+
+    Returns:
+    --------
+    xarray.Dataset
+        The dataset with corrected velocity fields.
+    """
+    # Calculate the sound speed correction factor
+    sound_speed_factor_ice = ds[true_sspd_name] / ds.Average_Soundspeed
+    mean_sspd_factor_ice = sound_speed_factor_ice.mean()
+
+    # Apply correction to 'uice' and 'vice'
+    for uv_key in ['uice', 'vice']:
+        if uv_key in ds:
+            ds[uv_key] = ds[uv_key].copy() * sound_speed_factor_ice
+
+            proc_add = (
+                'Amplitude scaled by improved sound speed estimate '
+                f'(mean scaling factor {mean_sspd_factor_ice:.4f}).'
+            )
+            ds[uv_key].attrs['processing_history'] = (
+                ds[uv_key].attrs.get('processing_history', '') + proc_add)
+
+    return ds
+
+
+
 def _calculate_uvice_avg(
         ds: xr.Dataset,
-        avg_method: str = "median") -> xr.Dataset:
+        avg_method: str = "median"
+) -> xr.Dataset:
     """
     Calculate ensemble average sea ice velocity.
 
@@ -136,7 +197,13 @@ def _calculate_uvice_avg(
 
 def calculate_ocean_vel(
         ds: xr.Dataset,
-        avg_method: str = "median") -> xr.Dataset:
+        avg_method: str = "median",
+        sspd_scaling: bool = False,
+        true_sspd_name: str = 'sound_speed_CTD'
+    ) -> xr.Dataset:
+
+
+
     """
     Calculate ocean velocity from the Average_VelEast and Average_VelNorth
     fields.
@@ -149,18 +216,22 @@ def calculate_ocean_vel(
     avg_method : str, optional
         Method to calculate ensemble average ('median' or 'mean'). Default is
         'median'.
+    sspd_scaling : bool, optional
+        If True, scales the ice velocity by the ratio of actual sound speed to averaged sound speed.
+    true_sspd_name : str, optional
+        The name of the dataset field containing the true sound speed values. Default is 'sound_speed_CTD'.
 
     Returns:
     --------
     xarray.Dataset
-        Updated dataset with 'uocean' and 'vocean' fields added.
+        Updated dataset with 'ucur' and 'vcur' fields added.
     """
 
     # Calculate bin depths
     ds = _calculate_bin_depths(ds)
 
     # Extract u, v, data
-    ds["uocean"] = (
+    ds["ucur"] = (
         ("BINS", "TIME", "SAMPLE"),
         ds.Average_VelEast.data,
         {
@@ -169,7 +240,7 @@ def calculate_ocean_vel(
             "details": "All average mode samples",
         },
     )
-    ds["vocean"] = (
+    ds["vcur"] = (
         ("BINS", "TIME", "SAMPLE"),
         ds.Average_VelNorth.data,
         {
@@ -179,20 +250,71 @@ def calculate_ocean_vel(
         },
     )
 
-    for key in ["uocean", "vocean"]:
+    for key in ["ucur", "vcur"]:
         ds[key].attrs["details"] = "All average mode samples"
         ds[key].attrs["units"] = "m s-1"
         ds[key].attrs[
             "processing_history"
         ] = "Loaded from Average_VelEast/Average_VelEast fields.\n"
 
+    # Perform sound speed scaling if applicable
+    if sspd_scaling:
+        if true_sspd_name in ds:
+            ds = _sspd_correction_ocean_vel(ds, true_sspd_name=true_sspd_name)
+        else:
+            print("Could not perform sound speed scaling of ice velocity "
+                  f"(field '{true_sspd_name}' not found)")
+
     # Calculate sample averages
-    ds = _calculate_uvocean_avg(ds, avg_method=avg_method)
+    ds = _calculate_uvcur_avg(ds, avg_method=avg_method)
 
     return ds
 
 
-def _calculate_uvocean_avg(
+
+def _sspd_correction_ocean_vel(
+        ds: xr.Dataset,
+        true_sspd_name: str = 'sound_speed_CTD') -> xr.Dataset:
+    """
+    Apply sound speed correction to ocean velocity.
+
+    This function scales the ocean current velocity fields ('ucur' and 'vcur') by
+    the ratio of the true sound speed to the average sound speed in the
+    dataset.
+
+    Parameters:
+    -----------
+    ds : xarray.Dataset
+        The dataset containing the velocity and sound speed data.
+    true_sspd_name : str
+        The name of the dataset field containing the true sound speed values.
+
+    Returns:
+    --------
+    xarray.Dataset
+        The dataset with corrected velocity fields.
+    """
+    # Calculate the sound speed correction factor
+    sound_speed_factor = ds[true_sspd_name] / ds.Average_Soundspeed
+    mean_sspd_factor = sound_speed_factor.mean()
+
+    # Apply correction to 'uice' and 'vice'
+    for uv_key in ['ucur', 'vcur']:
+        if uv_key in ds:
+            ds[uv_key] = ds[uv_key].copy() * sound_speed_factor
+
+            proc_add = (
+                'Amplitude scaled by improved sound speed estimate '
+                f'(mean scaling factor {mean_sspd_factor:.4f}).'
+            )
+            ds[uv_key].attrs['processing_history'] = (
+                ds[uv_key].attrs.get('processing_history', '') + proc_add)
+
+    return ds
+
+
+
+def _calculate_uvcur_avg(
     ds: xr.Dataset,
     avg_method: str = "median",
     min_good_pct: Optional[float] = None
@@ -214,15 +336,15 @@ def _calculate_uvocean_avg(
     Returns:
     --------
     xarray.Dataset
-        Updated dataset with 'Uocean' and 'Vocean' fields added.
+        Updated dataset with 'UCUR' and 'VCUR' fields added.
     """
 
     if avg_method == "median":
-        ds["Uocean"] = ds.uocean.median(dim="SAMPLE")
-        ds["Vocean"] = ds.vocean.median(dim="SAMPLE")
+        ds["UCUR"] = ds.ucur.median(dim="SAMPLE")
+        ds["VCUR"] = ds.vcur.median(dim="SAMPLE")
     elif avg_method == "mean":
-        ds["Uocean"] = ds.uocean.mean(dim="SAMPLE")
-        ds["Vocean"] = ds.vocean.mean(dim="SAMPLE")
+        ds["UCUR"] = ds.ucur.mean(dim="SAMPLE")
+        ds["VCUR"] = ds.vcur.mean(dim="SAMPLE")
     else:
         raise Exception(
             f'Invalid "avg_method" ("{avg_method}"). '
@@ -230,8 +352,8 @@ def _calculate_uvocean_avg(
         )
 
     if min_good_pct:
-        N_before = np.sum(~np.isnan(ds.Uocean))
-        good_ind = (np.isnan(ds.uocean).mean(dim="SAMPLE") < 1
+        N_before = np.sum(~np.isnan(ds.UCUR))
+        good_ind = (np.isnan(ds.ucur).mean(dim="SAMPLE") < 1
                     - min_good_pct / 100)
         N_after = np.sum(good_ind)
         min_good_str = (
@@ -239,23 +361,23 @@ def _calculate_uvocean_avg(
             f" ({(N_before - N_after) / N_before * 100:.2f}%) with "
             f"<{min_good_pct:.1f}% good samples."
         )
-        ds["Uocean"] = ds.Uocean.where(good_ind)
-        ds["Vocean"] = ds.Vocean.where(good_ind)
+        ds["UCUR"] = ds.UCUR.where(good_ind)
+        ds["VCUR"] = ds.VCUR.where(good_ind)
 
     else:
         min_good_str = ""
 
-    ds.Uocean.attrs = {
+    ds.UCUR.attrs = {
         "units": "m s-1",
         "long_name": "Eastward ocean velocity",
         "details": "Ensemble average (%s)" % avg_method,
-        "processing_history": ds.uocean.processing_history + min_good_str,
+        "processing_history": ds.ucur.processing_history + min_good_str,
     }
-    ds.Vocean.attrs = {
+    ds.VCUR.attrs = {
         "units": "m s-1",
         "long_name": "Northward ocean velocity",
         "details": "Ensemble average (%s)" % avg_method,
-        "processing_history": ds.vocean.processing_history + min_good_str,
+        "processing_history": ds.vcur.processing_history + min_good_str,
     }
 
     return ds
@@ -281,9 +403,9 @@ def _calculate_bin_depths(ds: xr.Dataset) -> xr.Dataset:
     """
 
     dist_from_transducer = (
-        ds.blanking_distance_oceanvel
-        + ds.cell_size_oceanvel
-        * (1 + np.arange(ds.N_cells_oceanvel))
+        ds.INSTRUMENT.blanking_distance_oceanvel
+        + ds.INSTRUMENT.cell_size_oceanvel
+        * (1 + np.arange(ds.INSTRUMENT.N_cells_oceanvel))
     )
 
     ds["bin_depth"] = (
@@ -315,8 +437,8 @@ def uvoc_mask_range(
     max_amp_increase: float = 20,
 ) -> xr.Dataset:
     """
-    Apply a series of masking criteria to ocean velocity components `uocean`
-    and `vocean`.
+    Apply a series of masking criteria to ocean velocity components `ucur`
+    and `vcur`.
 
     Masking criteria: 1. Speed exceeds `uv_max` (m/s). 2. Tilt exceeds
     `tilt_max` (degrees). 3. Instrument-recorded sound speed is outside
@@ -345,34 +467,34 @@ def uvoc_mask_range(
     Returns:
     --------
     xr.Dataset
-        The dataset with `uocean` and `vocean` masked according to the
+        The dataset with `ucur` and `vcur` masked according to the
         specified criteria.
     """
 
     # N_variables used for counting the effect of each step.
-    N_start = float(np.sum(~np.isnan(ds.uocean)).data)
+    N_start = float(np.sum(~np.isnan(ds.ucur)).data)
 
-    # Create ds_uv; a copy of ds containing only uocean, vocean.
+    # Create ds_uv; a copy of ds containing only ucur, vcur.
     # Then feeding these back into ds before returning.
     # (This is because we dont want the ds.where() operation
     # to affect other fields/expand dimensions unrelated to ocean
     # velocities)
-    ds_uv = ds[["uocean", "vocean"]]
+    ds_uv = ds[["ucur", "vcur"]]
 
     # Speed test
-    ds_uv = ds_uv.where((ds.uocean**2 + ds.vocean**2) < uv_max**2)
-    N_speed = float(np.sum(~np.isnan(ds_uv.uocean)).data)
+    ds_uv = ds_uv.where((ds.ucur**2 + ds.vcur**2) < uv_max**2)
+    N_speed = float(np.sum(~np.isnan(ds_uv.ucur)).data)
 
     # Tilt test
     ds_uv = ds_uv.where(ds.tilt_Average < tilt_max)
-    N_tilt = float(np.sum(~np.isnan(ds_uv.uocean)).data)
+    N_tilt = float(np.sum(~np.isnan(ds_uv.ucur)).data)
 
     # Sound speed test
     ds_uv = ds_uv.where(
         (ds.Average_Soundspeed > sspd_range[0])
         & (ds.Average_Soundspeed < sspd_range[1])
     )
-    N_sspd = float(np.sum(~np.isnan(ds_uv.uocean)).data)
+    N_sspd = float(np.sum(~np.isnan(ds_uv.ucur)).data)
 
     # Correlation test
     ds_uv = ds_uv.where(
@@ -381,7 +503,7 @@ def uvoc_mask_range(
         | (ds.Average_CorBeam3 > cor_min)
         | (ds.Average_CorBeam4 > cor_min)
     )
-    N_cor = float(np.sum(~np.isnan(ds_uv.uocean)).data)
+    N_cor = float(np.sum(~np.isnan(ds_uv.ucur)).data)
 
     # Amplitude test
     # Lower bound
@@ -399,7 +521,7 @@ def uvoc_mask_range(
         | (ds.Average_AmpBeam4 < amp_range[1])
     )
 
-    N_amp = float(np.sum(~np.isnan(ds_uv.uocean)).data)
+    N_amp = float(np.sum(~np.isnan(ds_uv.ucur)).data)
 
     # Amplitude bump test
 
@@ -412,13 +534,13 @@ def uvoc_mask_range(
     )
 
     # Create a boolean (*True* above bumps)
-    zeros_firstbin = xr.zeros_like(ds.uocean.isel(BINS=0))
+    zeros_firstbin = xr.zeros_like(ds.ucur.isel(BINS=0))
     NOT_ABOVE_BUMP = (
         xr.concat([zeros_firstbin, is_bump.cumsum(axis=0) > 0],
                   dim=("BINS")) < 1
     )
     ds_uv = ds_uv.where(NOT_ABOVE_BUMP)
-    N_amp_bump = float(np.sum(~np.isnan(ds_uv.uocean)).data)
+    N_amp_bump = float(np.sum(~np.isnan(ds_uv.ucur)).data)
 
     proc_string = (
         f"\nTHRESHOLD-BASED DATA CLEANING : "
@@ -442,12 +564,12 @@ def uvoc_mask_range(
         f"End: {N_amp_bump} valid samples.\n"
     )
 
-    for key in ["uocean", "vocean"]:
+    for key in ["ucur", "vcur"]:
         ds[key] = ds_uv[key]
         ds[key].attrs["processing_history"] += proc_string
 
     # Recompute sample averages
-    ds = _calculate_uvocean_avg(ds)
+    ds = _calculate_uvcur_avg(ds)
 
     return ds
 
@@ -456,11 +578,11 @@ def rotate_vels_magdec(ds: xr.Dataset) -> xr.Dataset:
     """
     Rotate ocean and ice velocities to account for magnetic declination.
 
-    This function rotates the processed fields (`uocean`, `vocean`, `uice`,
+    This function rotates the processed fields (`ucur`, `vcur`, `uice`,
     `vice`) by the magnetic declination angle to correct for geographic
     referencing. It does not modify raw variables (e.g., `Average_VelNorth`).
 
-    Average velocities (`Uocean`, `Vocean`, `uice`,`vice`) are recalculated
+    Average velocities (`UCUR`, `VCUR`, `UICE`,`VICE`) are recalculated
     after rotating.
 
     Parameters:
@@ -495,9 +617,9 @@ def rotate_vels_magdec(ds: xr.Dataset) -> xr.Dataset:
     # Loop through different (u, v) variable pairs and rotate them
     uvpairs = [
         ("uice", "vice"),
-        ("uocean", "vocean"),
+        ("ucur", "vcur"),
     ]  #
-    #  ('UICE', 'VICE'), ('Uocean', 'Vocean')]
+    #  ('UICE', 'VICE'), ('UCUR', 'VCUR')]
 
     uvstrs = ""
 
@@ -513,7 +635,7 @@ def rotate_vels_magdec(ds: xr.Dataset) -> xr.Dataset:
                 ds[key].attrs["processing_history"] += magdec_str + "\n"
             uvstrs += "\n - (%s, %s)" % uvpair
 
-    if hasattr(ds, "declination_correction"):
+    if hasattr(ds.INSTRUMENT, "declination_correction"):
         inp_yn = float(
             input(
                 "Declination correction rotation has been "
@@ -524,7 +646,7 @@ def rotate_vels_magdec(ds: xr.Dataset) -> xr.Dataset:
 
         if inp_yn == 1:
             print("-> Applying new correction.")
-            ds.attrs["declination_correction"] = (
+            ds.INSTRUMENT.attrs["declination_correction"] = (
                 "!! NOTE !! Magnetic declination correction has been applied "
                 "more than once - !! CAREFUL !!\n"
                 + ds.attrs["declination_correction"]
@@ -533,13 +655,13 @@ def rotate_vels_magdec(ds: xr.Dataset) -> xr.Dataset:
             print("-> NOT applying new correction.")
             return ds0
     else:
-        ds.attrs["declination_correction"] = (
+        ds.INSTRUMENT.attrs["declination_correction"] = (
             "Magdec declination correction rotation applied to: %s" % uvstrs
         )
     try:
-        ds = _calculate_uvocean_avg(ds, avg_method="median")
+        ds = _calculate_uvcur_avg(ds, avg_method="median")
     except Exception as e:
-        print(f"uvocean_avg failed: {e}")
+        print(f"uvcur_avg failed: {e}")
     try:
         ds = _calculate_uvice_avg(ds, avg_method="median")
     except Exception as e:
@@ -576,7 +698,7 @@ def clear_empty_bins(ds: xr.Dataset, thr_perc: float = 5) -> xr.Dataset:
 
     # Find indices of empty bins
     empty_bins = np.where(
-        np.isnan(ds.Uocean).mean("TIME")
+        np.isnan(ds.UCUR).mean("TIME")
         * 100 > (100 - thr_perc))[0]
     # Count
     Nbins_orig = ds.sizes["BINS"]
@@ -591,6 +713,44 @@ def clear_empty_bins(ds: xr.Dataset, thr_perc: float = 5) -> xr.Dataset:
         + "  valid. -> Remaining bins: %i" % (ds.sizes["BINS"])
     )
     return ds
+
+
+def sound_speed_correction(
+        ds:xr.Dataset,
+        true_sspd_name:str='sound_speed_CTD'
+        ) -> xr.Dataset:
+    '''
+
+    '''
+    sound_speed_factor = ds[true_sspd_name] / ds.AverageIce_Soundspeed
+    sound_speed_factor_ice = ds[true_sspd_name] / ds.Average_Soundspeed
+    mean_sspd_factor = sound_speed_factor.mean()
+    mean_sspd_factor_ice = sound_speed_factor_ice.mean()
+
+    for uv_key in ['uice', 'vice', 'UICE', 'VICE',]:
+        if uv_key in ds:
+            ds[uv_key] *= sound_speed_factor_ice
+
+            comment_add = (
+                'Amplitude scaled to improved sound speed estimate (mean '
+                f'factor {mean_sspd_factor_ice:.4f}).')
+
+            ds[uv_key].attrs['comment'] = (
+                ds[uv_key].attrs.get('comment', '') + comment_add)
+
+    for uv_key in ['UCUR', 'VCUR', 'ucur', 'vcur']:
+        if uv_key in ds:
+            ds[uv_key] *= sound_speed_factor
+
+            comment_add = (
+                'Amplitude scaled to improved sound speed estimate (mean '
+                f'factor {mean_sspd_factor:.4f}).')
+
+            ds[uv_key].attrs['comment'] = (
+                ds[uv_key].attrs.get('comment', '') + comment_add)
+
+    return ds
+
 
 
 def reject_sidelobe(ds: xr.Dataset) -> xr.Dataset:
@@ -623,14 +783,14 @@ def reject_sidelobe(ds: xr.Dataset) -> xr.Dataset:
     We use the sample mean tilt for θ.
 
     This function identifies and masks (sets to NaN) the velocity samples
-    (`uocean`, `vocean`) in regions close enough to the surface where sidelobe
+    (`ucur`, `vcur`) in regions close enough to the surface where sidelobe
      interference is expected, based on the calculated Rmax.
 
     Parameters:
     -----------
     ds : xr.Dataset
-        The input dataset containing ocean velocity components (`uocean`,
-        `vocean`), depth, bin depth, and possibly sea ice draft information.
+        The input dataset containing ocean velocity components (`ucur`,
+        `vcur`), depth, bin depth, and possibly sea ice draft information.
 
     Returns:
     --------
@@ -661,19 +821,19 @@ def reject_sidelobe(ds: xr.Dataset) -> xr.Dataset:
     Rmax = A * cos_theta - s_c
 
     # Make a copy with only velocities
-    ds_uv = ds[["uocean", "vocean"]]
+    ds_uv = ds[["ucur", "vcur"]]
     # NaN instances where bin depth is less than
     #   DEP-Rmax
     ds_uv = ds_uv.where(
         ds.bin_depth > (DEP - Rmax).expand_dims(dim={"BINS": ds.sizes["BINS"]})
     )
 
-    # Feed the NaNed (uocean, vocean) fields back into ds
+    # Feed the NaNed (ucur, vcur) fields back into ds
 
-    N_before = np.sum(~np.isnan(ds.uocean))  # Count samples
-    for key in ["uocean", "vocean"]:
+    N_before = np.sum(~np.isnan(ds.ucur))  # Count samples
+    for key in ["ucur", "vcur"]:
         ds[key] = ds_uv[key]
-    N_after = np.sum(~np.isnan(ds.uocean))  # Count samples
+    N_after = np.sum(~np.isnan(ds.ucur))  # Count samples
 
     # + Add processing history
     proc_string = (
@@ -682,17 +842,17 @@ def reject_sidelobe(ds: xr.Dataset) -> xr.Dataset:
         f"{(1 - N_after / N_before) * 100:.2f}%% of velocity samples)."
     )
 
-    for key in ["uocean", "vocean"]:
+    for key in ["ucur", "vcur"]:
         ds[key].attrs["processing_history"] += proc_string
 
     # Recompute sample averages
-    ds = _calculate_uvocean_avg(ds)
+    ds = _calculate_uvcur_avg(ds)
     return ds
 
 
 def interp_oceanvel(ds: xr.Dataset, target_depth: float) -> xr.Dataset:
     """
-    Interpolate ocean velocity components (`uocean`, `vocean`) to a fixed depth
+    Interpolate ocean velocity components (`ucur`, `vcur`) to a fixed depth
     (`target_depth`).
 
     This function interpolates the ocean velocity components from the measured
@@ -702,8 +862,8 @@ def interp_oceanvel(ds: xr.Dataset, target_depth: float) -> xr.Dataset:
     Parameters:
     -----------
     ds : xr.Dataset
-        The input dataset containing the ocean velocity components (`uocean`,
-        `vocean`) and their associated depths (`bin_depth`) over time.
+        The input dataset containing the ocean velocity components (`ucur`,
+        `vcur`) and their associated depths (`bin_depth`) over time.
     target_depth : float
         The depth (in meters) to which the velocities should be interpolated.
 
@@ -711,20 +871,20 @@ def interp_oceanvel(ds: xr.Dataset, target_depth: float) -> xr.Dataset:
     --------
     xr.Dataset
         The dataset with added velocity components interpolated to the
-        specified depth. The new variables are named `Uocean_<depth>m` and
-        `Vocean_<depth>m`.
+        specified depth. The new variables are named `UCUR_<depth>m` and
+        `VCUR_<depth>m`.
     """
     # Initialize the interpolated velocity arrays
-    U_IP = ds.Uocean.mean("BINS", keep_attrs=True).copy()
-    V_IP = ds.Vocean.mean("BINS", keep_attrs=True).copy()
+    U_IP = ds.UCUR.mean("BINS", keep_attrs=True).copy()
+    V_IP = ds.VCUR.mean("BINS", keep_attrs=True).copy()
     U_IP[:] = np.nan
     V_IP[:] = np.nan
 
-    # Interpolate Uocean onto the fixed depth
+    # Interpolate UCUR onto the fixed depth
     for nn in range(ds.sizes["TIME"]):
         ip_ = interp1d(
             ds.bin_depth.isel(TIME=nn),
-            ds.Uocean.isel(TIME=nn),
+            ds.UCUR.isel(TIME=nn),
             bounds_error=False,
             fill_value=np.nan,
         )
@@ -732,18 +892,18 @@ def interp_oceanvel(ds: xr.Dataset, target_depth: float) -> xr.Dataset:
 
         if nn % 10 == 0:
             print(
-                'Interpolating "Uocean" ('
+                'Interpolating "UCUR" ('
                 f'{100 * nn / ds.sizes["TIME"]:.1f}%%)...\r',
                 end="",
             )
 
-    print('Interpolating "Uocean": *DONE*     \r', end="")
+    print('Interpolating "UCUR": *DONE*     \r', end="")
 
-    # Interpolate Vocean onto the fixed depth
+    # Interpolate VCUR onto the fixed depth
     for nn in range(ds.sizes["TIME"]):
         ip_ = interp1d(
             ds.bin_depth.isel(TIME=nn),
-            ds.Vocean.isel(TIME=nn),
+            ds.VCUR.isel(TIME=nn),
             bounds_error=False,
             fill_value=np.nan,
         )
@@ -751,35 +911,35 @@ def interp_oceanvel(ds: xr.Dataset, target_depth: float) -> xr.Dataset:
 
         if nn % 10 == 0:
             print(
-                'Interpolating "Vocean" '
+                'Interpolating "VCUR" '
                 f'({100 * nn / ds.sizes["TIME"]:.1f}%%)...\r',
                 end="",
             )
 
-    print('Interpolating "Vocean": *DONE*     \r', end="")
+    print('Interpolating "VCUR": *DONE*     \r', end="")
 
     # Create variable names based on the target depth
-    U_IP_name = f"Uocean_{int(np.round(target_depth))}m"
-    V_IP_name = f"Vocean_{int(np.round(target_depth))}m"
+    U_IP_name = f"UCUR_{int(np.round(target_depth))}m"
+    V_IP_name = f"VCUR_{int(np.round(target_depth))}m"
 
     # Add interpolated velocities to the dataset with appropriate attributes
     ds[U_IP_name] = U_IP
     ds[U_IP_name].attrs["long_name"] = (
-        f"{ds.Uocean.attrs['long_name']} "
+        f"{ds.UCUR.attrs['long_name']} "
         f"interpolated to {target_depth:.1f} m depth"
     )
     ds[U_IP_name].attrs["processing_history"] = (
-        f"{ds.Uocean.attrs['processing_history']} "
+        f"{ds.UCUR.attrs['processing_history']} "
         f"\nInterpolated to {target_depth:.1f} m depth."
     )
 
     ds[V_IP_name] = V_IP
     ds[V_IP_name].attrs["long_name"] = (
-        f"{ds.Vocean.attrs['long_name']} "
+        f"{ds.VCUR.attrs['long_name']} "
         f"interpolated to {target_depth:.1f} m depth"
     )
     ds[V_IP_name].attrs["processing_history"] = (
-        f"{ds.Vocean.attrs['processing_history']} "
+        f"{ds.VCUR.attrs['processing_history']} "
         f"\nInterpolated to {target_depth:.1f} m depth."
     )
 
