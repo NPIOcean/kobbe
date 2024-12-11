@@ -842,6 +842,13 @@ def reject_sidelobe(ds: xr.Dataset) -> xr.Dataset:
         (set to NaN).
     """
 
+    # Get the beam angle (20 for Sig55 and Sig250, 25 for Sig500)
+    if ds.instrument_model in ['Nortek Signature250', 'Nortek Signature55']:
+        beam_angle_deg = 20
+    elif ds.instrument_model == 'Nortek Signature500':
+        beam_angle_deg = 25
+
+    # Check that we have a depth
     if "depth" in ds.keys():
         DEP = ds.depth.mean(dim="SAMPLE")
     else:
@@ -851,16 +858,19 @@ def reject_sidelobe(ds: xr.Dataset) -> xr.Dataset:
             "Run sig_calc.dep_from_p() first."
         )
 
+    # Ice draft if available
     if "SEA_ICE_DRAFT_LE" in ds.keys():
         ICE_DRAFT = ds.SEA_ICE_DRAFT_MEDIAN_LE.copy().fillna(0)
-
     else:
         ICE_DRAFT = 0
 
+    # Vertical distance transducer to ocean or ice surface
     A = DEP - ICE_DRAFT
-    cos_theta = np.cos(25 * np.pi / 180.0)
-    s_c = ds.cell_size_oceanvel
 
+    # Maximum range whern accounting for sidelobe interference
+    # (nortekgroup.com/assets/software/N3015-011-SignaturePrinciples.pdf, 2.4)
+    cos_theta = np.cos(beam_angle_deg * np.pi / 180.0)
+    s_c = ds.INSTRUMENT.cell_size_oceanvel
     Rmax = A * cos_theta - s_c
 
     # Make a copy with only velocities
@@ -872,7 +882,6 @@ def reject_sidelobe(ds: xr.Dataset) -> xr.Dataset:
     )
 
     # Feed the NaNed (ucur, vcur) fields back into ds
-
     N_before = np.sum(~np.isnan(ds.ucur))  # Count samples
     for key in ["ucur", "vcur"]:
         ds[key] = ds_uv[key]
