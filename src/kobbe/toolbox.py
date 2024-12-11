@@ -193,12 +193,15 @@ def plot_ellipse_icevel(
 
     print("ELLIPSE PLOT: Interpolate over nans.. \r", end="")
 
-    uip = ds.UICE.interpolate_na(dim="TIME", limit=10).data
-    vip = ds.VICE.interpolate_na(dim="TIME", limit=10).data
+    uip = ds.UICE.interpolate_na(dim="TIME", limit=10).dropna(dim='TIME').data
+    vip = ds.VICE.interpolate_na(dim="TIME", limit=10).dropna(dim='TIME').data
 
     print("ELLIPSE PLOT: Low pass filtering..    \r", end="")
+
     # LPFed
-    wlen = int(np.round(lp_days / (ds.sampling_interval_sec / 60 / 60 / 24)))
+    wlen = int(np.round(lp_days /
+                        (ds.INSTRUMENT.time_between_ensembles_sec
+                         / (60 * 60 * 24))))
     ULP = np.convolve(uip, np.ones(wlen) / wlen, mode="valid")[::wlen]
     VLP = np.convolve(vip, np.ones(wlen) / wlen, mode="valid")[::wlen]
 
@@ -206,7 +209,8 @@ def plot_ellipse_icevel(
 
     # Ellipse
     thp, majax, minax = uv.principal_angle(
-        ULP - np.nanmean(ULP), VLP - np.nanmean(VLP))
+        ULP - np.nanmean(ULP), VLP - np.nanmean(VLP),
+        return_std=True)
 
     # Mean
     UM, VM = np.nanmean(ULP), np.nanmean(VLP)
@@ -249,8 +253,10 @@ def plot_ellipse_icevel(
     umin = np.array([-minax * np.cos(thp + np.pi / 2),
                      minax * np.cos(thp + np.pi / 2)])
 
-    ax.plot(UM + umaj, VM + vmaj, "-k", lw=2, label="Maj axis")
-    ax.plot(UM + umin, VM + vmin, "--k", lw=2, label="Min axis")
+  #  ax.plot(UM + umaj, VM + vmaj, "-k", lw=2, label="Maj axis")
+  #  ax.plot(UM + umin, VM + vmin, "--k", lw=2, label="Min axis")
+    ax.plot(umaj, vmaj, "-k", lw=2, label="Maj axis")
+    ax.plot(umin, vmin, "--k", lw=2, label="Min axis")
 
     ax.quiver(
         0,
@@ -260,9 +266,9 @@ def plot_ellipse_icevel(
         color="r",
         scale_units="xy",
         scale=1,
-        width=0.03,
-        headlength=2,
-        headaxislength=2,
+        #width=0.03,
+        #headlength=2,
+        #headaxislength=2,
         alpha=0.6,
         label=f"Mean (u: {UM:.2f}, v: {VM:.2f})",
         edgecolor="k",

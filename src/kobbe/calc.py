@@ -22,7 +22,9 @@ def dep_from_p(
 
     Computing depth based on the following:
     - Absolute pressure measured by the instrument (from
-      `Average_AltimeterPressure` plus the fixed atmospheric offset which is
+      `Average_AltimeterPressure` if available, else
+      `Average_AltimeterPressure`
+      plus the fixed atmospheric offset which is
       automaically subtracted from this field).
     - Atmospheric pressure (from `p_atmo` field, if available).
     - Gravitational acceleration (calculated from latitude).
@@ -49,7 +51,11 @@ def dep_from_p(
     )
 
     # CALCULATE ABSOLUTE PRESSURE
-    p_abs = ds.Average_AltimeterPressure + ds.INSTRUMENT.pressure_offset
+
+    if 'Average_AltimeterPressure' in ds:
+        p_abs = ds.Average_AltimeterPressure + ds.INSTRUMENT.pressure_offset
+    else:
+        p_abs = ds.Average_Pressure + ds.INSTRUMENT.pressure_offset
 
     # CALCULATE OCEAN PRESSURE
     # Raising issues if we cannot find p_atmo (predefined atmospheric pressure)
@@ -79,8 +85,11 @@ def dep_from_p(
 
         else:
             user_input_abort = "C"
+        if 'Average_AltimeterPressure' in ds:
+            p_ocean = ds.Average_AltimeterPressure.data
+        else:
+            p_ocean = ds.Average_Pressure.data
 
-        p_ocean = ds.Average_AltimeterPressure.data
         print("Continuing without atmospheric correction (careful!)..")
         note_str += (
             "\n- !!! NO TIME_VARYING ATMOSPHERIC CORRECTION APPLIED"

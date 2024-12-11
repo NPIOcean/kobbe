@@ -192,7 +192,8 @@ def matfiles_to_dataset(
     )
 
     # Add sea ice concentration estimate from FOM
-    ds = _add_SIC_FOM(ds)
+    if 'AverageIce_Time' in ds: #
+        ds = _add_SIC_FOM(ds)
 
     # Create an INSTRUMENT variable with instrument/sampling information
     ds = _make_instrument_var(ds)
@@ -359,7 +360,7 @@ def overview(ds: xr.Dataset) -> None:
     None
     """
     # Validate required fields
-    required_fields = ["TIME", "Average_AltimeterPressure",
+    required_fields = ["TIME", "Average_Pressure",
                        "time_between_ensembles_sec", "sampling_interval_sec"]
     for field in required_fields:
         if field not in ds and field not in ds.attrs:

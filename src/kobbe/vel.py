@@ -14,6 +14,7 @@ from typing import Tuple, Optional
 def calculate_ice_vel(
     ds: xr.Dataset,
     avg_method: str = "median",
+    min_per_ensemble: float = 1,
     sspd_scaling: bool = False,
     true_sspd_name: str = 'sound_speed_CTD'
 ) -> xr.Dataset:
@@ -27,6 +28,8 @@ def calculate_ice_vel(
     avg_method : str, optional
         Method to calculate ensemble average ('median' or 'mean'). Default is
         'median'.
+    min_per_ensemble : int, optional
+        Minimum number of samples required to produce a valid ensemble average.
     sspd_scaling : bool, optional
         If True, scales the ice velocity by the ratio of actual sound speed to
         averaged sound speed.
@@ -76,7 +79,8 @@ def calculate_ice_vel(
             print(f"Could not perform sound speed scaling of ice velocity (field '{true_sspd_name}' not found)")
 
     # Calculate average ice velocity
-    ds = _calculate_uvice_avg(ds, avg_method=avg_method)
+    ds = _calculate_uvice_avg(ds, avg_method=avg_method,
+                              min_per_ensemble=min_per_ensemble)
 
     return ds
 
@@ -125,7 +129,8 @@ def _sspd_correction_ice_vel(
 
 def _calculate_uvice_avg(
         ds: xr.Dataset,
-        avg_method: str = "median"
+        avg_method: str = "median",
+        min_per_ensemble: int = 1,
 ) -> xr.Dataset:
     """
     Calculate ensemble average sea ice velocity.
@@ -137,6 +142,8 @@ def _calculate_uvice_avg(
     avg_method : str, optional
         Method to calculate ensemble average ('median' or 'mean'). Default is
         'median'.
+    min_per_ensemble : int, optional
+        Minimum number of samples required to produce a valid ensemble average.
 
     Returns:
     --------
@@ -156,6 +163,7 @@ def _calculate_uvice_avg(
             f'Invalid "avg_method" ("{avg_method}").'
             ' Must be "mean" or "median".'
         )
+
 
     ds.UICE.attrs = {
         "units": "m s-1",
@@ -191,6 +199,13 @@ def _calculate_uvice_avg(
             "northward sea ice drift velocity"
         ),
     }
+
+    # Set to NaN where the number of valid samples
+
+    n_valid = ds.uice.notnull().sum(dim='SAMPLE')
+
+    for key in ['UICE', 'VICE', 'UICE_SD', 'VICE_SD']:
+        ds[key] = ds[key].where(n_valid >= min_per_ensemble)
 
     return ds
 
@@ -497,47 +512,75 @@ def uvoc_mask_range(
     N_sspd = float(np.sum(~np.isnan(ds_uv.ucur)).data)
 
     # Correlation test
-    ds_uv = ds_uv.where(
-        (ds.Average_CorBeam1 > cor_min)
-        | (ds.Average_CorBeam2 > cor_min)
-        | (ds.Average_CorBeam3 > cor_min)
-        | (ds.Average_CorBeam4 > cor_min)
-    )
+    if 'Average_CorBeam4' in ds:
+        ds_uv = ds_uv.where(
+            (ds.Average_CorBeam1 > cor_min)
+            | (ds.Average_CorBeam2 > cor_min)
+            | (ds.Average_CorBeam3 > cor_min)
+            | (ds.Average_CorBeam4 > cor_min)
+        )
+    else:
+        ds_uv = ds_uv.where(
+            (ds.Average_CorBeam1 > cor_min)
+            | (ds.Average_CorBeam2 > cor_min)
+            | (ds.Average_CorBeam3 > cor_min)
+        )
     N_cor = float(np.sum(~np.isnan(ds_uv.ucur)).data)
 
     # Amplitude test
     # Lower bound
-    ds_uv = ds_uv.where(
-        (ds.Average_AmpBeam1 > amp_range[0])
-        | (ds.Average_AmpBeam2 > amp_range[0])
-        | (ds.Average_AmpBeam3 > amp_range[0])
-        | (ds.Average_AmpBeam4 > amp_range[0])
-    )
+    if 'Average_AmpBeam4' in ds:
+        ds_uv = ds_uv.where(
+            (ds.Average_AmpBeam1 > amp_range[0])
+            | (ds.Average_AmpBeam2 > amp_range[0])
+            | (ds.Average_AmpBeam3 > amp_range[0])
+            | (ds.Average_AmpBeam4 > amp_range[0])
+        )
+    else:
+        ds_uv = ds_uv.where(
+            (ds.Average_AmpBeam1 > amp_range[0])
+            | (ds.Average_AmpBeam2 > amp_range[0])
+            | (ds.Average_AmpBeam3 > amp_range[0])
+        )
+
     # Upper bound
-    ds_uv = ds_uv.where(
-        (ds.Average_AmpBeam1 < amp_range[1])
-        | (ds.Average_AmpBeam2 < amp_range[1])
-        | (ds.Average_AmpBeam3 < amp_range[1])
-        | (ds.Average_AmpBeam4 < amp_range[1])
-    )
+    if 'Average_AmpBeam4' in ds:
+        ds_uv = ds_uv.where(
+            (ds.Average_AmpBeam1 < amp_range[1])
+            | (ds.Average_AmpBeam2 < amp_range[1])
+            | (ds.Average_AmpBeam3 < amp_range[1])
+            | (ds.Average_AmpBeam4 < amp_range[1])
+        )
+    else:
+        ds_uv = ds_uv.where(
+            (ds.Average_AmpBeam1 < amp_range[1])
+            | (ds.Average_AmpBeam2 < amp_range[1])
+            | (ds.Average_AmpBeam3 < amp_range[1])
+        )
 
     N_amp = float(np.sum(~np.isnan(ds_uv.ucur)).data)
 
     # Amplitude bump test
-
     # Find bumps from *diff* in the BIN S dimension
-    is_bump = (
-        (ds.Average_AmpBeam1.diff(dim="BINS") > max_amp_increase)
-        | (ds.Average_AmpBeam2.diff(dim="BINS") > max_amp_increase)
-        | (ds.Average_AmpBeam3.diff(dim="BINS") > max_amp_increase)
-        | (ds.Average_AmpBeam4.diff(dim="BINS") > max_amp_increase)
-    )
+    if 'Average_AmpBeam4' in ds:
+        is_bump = (
+            (ds.Average_AmpBeam1.diff(dim="BINS") > max_amp_increase)
+            | (ds.Average_AmpBeam2.diff(dim="BINS") > max_amp_increase)
+            | (ds.Average_AmpBeam3.diff(dim="BINS") > max_amp_increase)
+            | (ds.Average_AmpBeam4.diff(dim="BINS") > max_amp_increase)
+        )
+    else:
+        is_bump = (
+            (ds.Average_AmpBeam1.diff(dim="BINS") > max_amp_increase)
+            | (ds.Average_AmpBeam2.diff(dim="BINS") > max_amp_increase)
+            | (ds.Average_AmpBeam3.diff(dim="BINS") > max_amp_increase)
+        )
 
     # Create a boolean (*True* above bumps)
     zeros_firstbin = xr.zeros_like(ds.ucur.isel(BINS=0))
     NOT_ABOVE_BUMP = (
         xr.concat([zeros_firstbin, is_bump.cumsum(axis=0) > 0],
-                  dim=("BINS")) < 1
+                dim=("BINS")) < 1
     )
     ds_uv = ds_uv.where(NOT_ABOVE_BUMP)
     N_amp_bump = float(np.sum(~np.isnan(ds_uv.ucur)).data)
@@ -649,7 +692,7 @@ def rotate_vels_magdec(ds: xr.Dataset) -> xr.Dataset:
             ds.INSTRUMENT.attrs["declination_correction"] = (
                 "!! NOTE !! Magnetic declination correction has been applied "
                 "more than once - !! CAREFUL !!\n"
-                + ds.attrs["declination_correction"]
+                + ds.INSTRUMENT.attrs["declination_correction"]
             )
         else:
             print("-> NOT applying new correction.")
