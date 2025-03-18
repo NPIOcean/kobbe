@@ -13,7 +13,7 @@ from typing import Tuple, Optional
 
 def calculate_ice_vel(
     ds: xr.Dataset,
-    avg_method: str = "median",
+    avg_method: str = "mean",
     min_per_ensemble: float = 1,
     sspd_scaling: bool = False,
     true_sspd_name: str = 'sound_speed_CTD'
@@ -27,7 +27,7 @@ def calculate_ice_vel(
         Input dataset containing the AverageIce velocity components.
     avg_method : str, optional
         Method to calculate ensemble average ('median' or 'mean'). Default is
-        'median'.
+        'mean'.
     min_per_ensemble : int, optional
         Minimum number of samples required to produce a valid ensemble average.
     sspd_scaling : bool, optional
@@ -67,9 +67,10 @@ def calculate_ice_vel(
     ds["uice"] = ds["uice"].where(ds.ICE_IN_SAMPLE)
     ds["vice"] = ds["vice"].where(ds.ICE_IN_SAMPLE)
 
-    # Add processing history
-    for key in ["uice", "vice"]:
-        ds[key].attrs["processing_history"] = "Loaded from AverageIce_VelEast/AverageIce_VelNorth fields.\n"
+    # Add processing history - DROP for now
+    if False:
+        for key in ["uice", "vice"]:
+            ds[key].attrs["processing_history"] = "Loaded from AverageIce_VelEast/AverageIce_VelNorth fields.\n"
 
     # Perform sound speed scaling if applicable
     if sspd_scaling:
@@ -120,8 +121,9 @@ def _sspd_correction_ice_vel(
                 'Amplitude scaled by improved sound speed estimate '
                 f'(mean scaling factor {mean_sspd_factor_ice:.4f}).'
             )
-            ds[uv_key].attrs['processing_history'] = (
-                ds[uv_key].attrs.get('processing_history', '') + proc_add)
+            if False: # Drop for now
+                ds[uv_key].attrs['processing_history'] = (
+                    ds[uv_key].attrs.get('processing_history', '') + proc_add)
 
     return ds
 
@@ -129,7 +131,7 @@ def _sspd_correction_ice_vel(
 
 def _calculate_uvice_avg(
         ds: xr.Dataset,
-        avg_method: str = "median",
+        avg_method: str = "mean",
         min_per_ensemble: int = 1,
 ) -> xr.Dataset:
     """
@@ -141,7 +143,7 @@ def _calculate_uvice_avg(
         Input dataset containing sea ice velocity components.
     avg_method : str, optional
         Method to calculate ensemble average ('median' or 'mean'). Default is
-        'median'.
+        'mean'.
     min_per_ensemble : int, optional
         Minimum number of samples required to produce a valid ensemble average.
 
@@ -169,13 +171,15 @@ def _calculate_uvice_avg(
         "units": "m s-1",
         "long_name": "Eastward sea ice drift velocity",
         "details": "Ensemble average (%s)" % avg_method,
-        "processing_history": ds.uice.processing_history,
+        # Drop for now
+        #"processing_history": ds.uice.processing_history,
     }
     ds.VICE.attrs = {
         "units": "m s-1",
         "long_name": "Northward sea ice drift velocity",
         "details": "Ensemble average (%s)" % avg_method,
-        "processing_history": ds.vice.processing_history,
+        # Drop for now
+        #"processing_history": ds.vice.processing_history,
     }
 
     with warnings.catch_warnings():  # Suppressing (benign) warning yielded
@@ -212,12 +216,11 @@ def _calculate_uvice_avg(
 
 def calculate_ocean_vel(
         ds: xr.Dataset,
-        avg_method: str = "median",
+        avg_method: str = "mean",
+        orientation: str = "up",
         sspd_scaling: bool = False,
         true_sspd_name: str = 'sound_speed_CTD'
     ) -> xr.Dataset:
-
-
 
     """
     Calculate ocean velocity from the Average_VelEast and Average_VelNorth
@@ -230,11 +233,15 @@ def calculate_ocean_vel(
         fields.
     avg_method : str, optional
         Method to calculate ensemble average ('median' or 'mean'). Default is
-        'median'.
+        'mean'.
+    orientation : str ['up', 'dn']
+        Vertical orientation of the acoustic beam.
     sspd_scaling : bool, optional
-        If True, scales the ice velocity by the ratio of actual sound speed to averaged sound speed.
+        If True, scales the ice velocity by the ratio of actual sound speed to
+        averaged sound speed.
     true_sspd_name : str, optional
-        The name of the dataset field containing the true sound speed values. Default is 'sound_speed_CTD'.
+        The name of the dataset field containing the true sound speed values.
+        Default is 'sound_speed_CTD'.
 
     Returns:
     --------
@@ -243,11 +250,11 @@ def calculate_ocean_vel(
     """
 
     # Calculate bin depths
-    ds = _calculate_bin_depths(ds)
+    ds = _calculate_bin_depths(ds, orientation = orientation)
 
     # Extract u, v, data
     ds["ucur"] = (
-        ("BINS", "TIME", "SAMPLE"),
+        ("TIME", "VEL_BIN", "SAMPLE"),
         ds.Average_VelEast.data,
         {
             "units": "m s-1",
@@ -256,7 +263,7 @@ def calculate_ocean_vel(
         },
     )
     ds["vcur"] = (
-        ("BINS", "TIME", "SAMPLE"),
+        ("TIME", "VEL_BIN", "SAMPLE"),
         ds.Average_VelNorth.data,
         {
             "units": "m s-1",
@@ -268,9 +275,11 @@ def calculate_ocean_vel(
     for key in ["ucur", "vcur"]:
         ds[key].attrs["details"] = "All average mode samples"
         ds[key].attrs["units"] = "m s-1"
-        ds[key].attrs[
-            "processing_history"
-        ] = "Loaded from Average_VelEast/Average_VelEast fields.\n"
+        if False: # Drop for now
+
+            ds[key].attrs[
+                "processing_history"
+            ] = "Loaded from Average_VelEast/Average_VelEast fields.\n"
 
     # Perform sound speed scaling if applicable
     if sspd_scaling:
@@ -281,7 +290,7 @@ def calculate_ocean_vel(
                   f"(field '{true_sspd_name}' not found)")
 
     # Calculate sample averages
-    ds = _calculate_uvcur_avg(ds, avg_method=avg_method)
+    ds = calculate_uvcur_avg(ds, avg_method=avg_method)
 
     return ds
 
@@ -322,16 +331,17 @@ def _sspd_correction_ocean_vel(
                 'Amplitude scaled by improved sound speed estimate '
                 f'(mean scaling factor {mean_sspd_factor:.4f}).'
             )
-            ds[uv_key].attrs['processing_history'] = (
-                ds[uv_key].attrs.get('processing_history', '') + proc_add)
+            if False: # Drop for now
+                ds[uv_key].attrs['processing_history'] = (
+                    ds[uv_key].attrs.get('processing_history', '') + proc_add)
 
     return ds
 
 
 
-def _calculate_uvcur_avg(
+def calculate_uvcur_avg(
     ds: xr.Dataset,
-    avg_method: str = "median",
+    avg_method: str = "mean",
     min_good_pct: Optional[float] = None
 ) -> xr.Dataset:
     """
@@ -343,7 +353,7 @@ def _calculate_uvcur_avg(
         Input dataset containing ocean velocity components.
     avg_method : str, optional
         Method to calculate ensemble average ('median' or 'mean'). Default is
-        'median'.
+        'mean'.
     min_good_pct : float, optional
         Minimum percentage of good samples required for a bin to be included in
         the average. Default is None.
@@ -386,19 +396,20 @@ def _calculate_uvcur_avg(
         "units": "m s-1",
         "long_name": "Eastward ocean velocity",
         "details": "Ensemble average (%s)" % avg_method,
-        "processing_history": ds.ucur.processing_history + min_good_str,
+      #  "processing_history": ds.ucur.processing_history + min_good_str,
     }
     ds.VCUR.attrs = {
         "units": "m s-1",
         "long_name": "Northward ocean velocity",
         "details": "Ensemble average (%s)" % avg_method,
-        "processing_history": ds.vcur.processing_history + min_good_str,
+       # "processing_history": ds.vcur.processing_history + min_good_str,
     }
 
     return ds
 
 
-def _calculate_bin_depths(ds: xr.Dataset) -> xr.Dataset:
+def _calculate_bin_depths(ds: xr.Dataset,
+                          orientation: str='up') -> xr.Dataset:
     """
     Calculate time-varying depth of ocean velocity bins.
 
@@ -414,7 +425,7 @@ def _calculate_bin_depths(ds: xr.Dataset) -> xr.Dataset:
     Returns:
     --------
     xarray.Dataset
-        Updated dataset with 'bin_depth' field added.
+        Updated dataset with 'BIN_DEPTH' field added.
     """
 
     dist_from_transducer = (
@@ -423,21 +434,24 @@ def _calculate_bin_depths(ds: xr.Dataset) -> xr.Dataset:
         * (1 + np.arange(ds.INSTRUMENT.N_cells_oceanvel))
     )
 
-    ds["bin_depth"] = (
-        ds.depth.mean(dim="SAMPLE").expand_dims(
-            dim={"BINS": ds.sizes["BINS"]})
+    if orientation in ['dn', 'down', 'DOWN', 'DN']:
+        dist_from_transducer = -dist_from_transducer
+        orientation = 'down'
+
+    ds["BIN_DEPTH"] = (
+        ds.instr_depth.mean(dim="SAMPLE").expand_dims(
+            dim={"VEL_BIN": ds.sizes["VEL_BIN"]})
         - dist_from_transducer[:, np.newaxis]
     )
-    ds["bin_depth"].attrs = {
-        "long_name": "Sample-average depth of velocity bins",
-        "units": "m",
-        "note": (
-            "Calculated as:\n\n"
-            "   bin_depth = instr_depth - (blanking depth + n*cell size)\n\n"
-            "where *n* is bin number and *inst_depth* the (sample-mean) depth"
-            " of the transducer."
-        ),
-    }
+    ds["BIN_DEPTH"] = ds["BIN_DEPTH"].transpose("TIME", "VEL_BIN")
+
+    ds["BIN_DEPTH"].attrs = {
+        'long_name' : 'Time-varying depth of each velocity bin',
+        'standard_name' : 'depth',
+        'coverage_content_type':  'coordinate',
+        'axis' : 'Z', 'units' : 'm', 'positive' : 'down',
+        }
+    ds = ds.set_coords(['BIN_DEPTH'])
 
     return ds
 
@@ -450,6 +464,7 @@ def uvoc_mask_range(
     cor_min: float = 60,
     amp_range: Tuple[float, float] = (30, 85),
     max_amp_increase: float = 20,
+    return_proc_string: bool = False
 ) -> xr.Dataset:
     """
     Apply a series of masking criteria to ocean velocity components `ucur`
@@ -478,7 +493,8 @@ def uvoc_mask_range(
         Acceptable range of beam amplitudes (default is 30 to 85 dB).
     max_amp_increase : float, optional
         Maximum allowable bin-to-bin amplitude increase (default is 20 dB).
-
+    return_proc_string:
+        Whether to return a processing string (to be removed - drop)
     Returns:
     --------
     xr.Dataset
@@ -561,26 +577,26 @@ def uvoc_mask_range(
     N_amp = float(np.sum(~np.isnan(ds_uv.ucur)).data)
 
     # Amplitude bump test
-    # Find bumps from *diff* in the BIN S dimension
+    # Find bumps from *diff* in the VEL_BIN S dimension
     if 'Average_AmpBeam4' in ds:
         is_bump = (
-            (ds.Average_AmpBeam1.diff(dim="BINS") > max_amp_increase)
-            | (ds.Average_AmpBeam2.diff(dim="BINS") > max_amp_increase)
-            | (ds.Average_AmpBeam3.diff(dim="BINS") > max_amp_increase)
-            | (ds.Average_AmpBeam4.diff(dim="BINS") > max_amp_increase)
+            (ds.Average_AmpBeam1.diff(dim="VEL_BIN") > max_amp_increase)
+            | (ds.Average_AmpBeam2.diff(dim="VEL_BIN") > max_amp_increase)
+            | (ds.Average_AmpBeam3.diff(dim="VEL_BIN") > max_amp_increase)
+            | (ds.Average_AmpBeam4.diff(dim="VEL_BIN") > max_amp_increase)
         )
     else:
         is_bump = (
-            (ds.Average_AmpBeam1.diff(dim="BINS") > max_amp_increase)
-            | (ds.Average_AmpBeam2.diff(dim="BINS") > max_amp_increase)
-            | (ds.Average_AmpBeam3.diff(dim="BINS") > max_amp_increase)
+            (ds.Average_AmpBeam1.diff(dim="VEL_BIN") > max_amp_increase)
+            | (ds.Average_AmpBeam2.diff(dim="VEL_BIN") > max_amp_increase)
+            | (ds.Average_AmpBeam3.diff(dim="VEL_BIN") > max_amp_increase)
         )
 
     # Create a boolean (*True* above bumps)
-    zeros_firstbin = xr.zeros_like(ds.ucur.isel(BINS=0))
+    zeros_firstbin = xr.zeros_like(ds.ucur.isel(VEL_BIN=0))
     NOT_ABOVE_BUMP = (
         xr.concat([zeros_firstbin, is_bump.cumsum(axis=0) > 0],
-                dim=("BINS")) < 1
+                dim=("VEL_BIN")) < 1
     )
     ds_uv = ds_uv.where(NOT_ABOVE_BUMP)
     N_amp_bump = float(np.sum(~np.isnan(ds_uv.ucur)).data)
@@ -590,34 +606,40 @@ def uvoc_mask_range(
         f"\nStart: {N_start} initial valid samples.\n"
         f"Dropping (NaNing samples where):\n"
         f"- # Speed < {uv_max:.2f} ms-1 # -> Dropped {N_start - N_speed} pts "
-        f"({(N_start - N_speed) / N_start * 100:.2f}%%)\n"
+        f"({(N_start - N_speed) / N_start * 100:.2f}%)\n"
         f"- # Tilt < {tilt_max:.2f} deg # -> Dropped {N_speed - N_tilt} pts "
-        f"({(N_speed - N_tilt) / N_speed * 100:.2f}%%)\n"
+        f"({(N_speed - N_tilt) / N_speed * 100:.2f}%)\n"
         f"- # Sound sp in [{sspd_range[0]:.0f}, {sspd_range[1]:.0f}] ms-1 # ->"
         f" Dropped {N_tilt - N_sspd} pts "
-        f"({(N_tilt - N_sspd) / N_tilt * 100:.2f}%%)\n"
-        f"- # Corr (all beams) < {cor_min:.1f} %% # -> Dropped "
-        f"{N_sspd - N_cor} pts ({(N_sspd - N_cor) / N_sspd * 100:.2f}%%)\n"
+        f"({(N_tilt - N_sspd) / N_tilt * 100:.2f}%)\n"
+        f"- # Corr (all beams) < {cor_min:.1f} % # -> Dropped "
+        f"{N_sspd - N_cor} pts ({(N_sspd - N_cor) / N_sspd * 100:.2f}%)\n"
         f"- # Amp (all beams) in [{amp_range[0]:.0f}, {amp_range[1]:.0f}] db "
         f"# -> Dropped {N_cor - N_amp} pts "
-        f"({(N_cor - N_amp) / N_cor * 100:.2f}%%)\n"
+        f"({(N_cor - N_amp) / N_cor * 100:.2f}%)\n"
         f"- # Above amp bumps > {max_amp_increase:.0f} db # -> Dropped "
         f"{N_amp - N_amp_bump} pts "
-        f"({(N_amp - N_amp_bump) / N_amp * 100:.2f}%%)\n"
-        f"End: {N_amp_bump} valid samples.\n"
+        f"({(N_amp - N_amp_bump) / N_amp * 100:.2f}%)\n"
+        f"End: {N_amp_bump} valid samples."
     )
 
     for key in ["ucur", "vcur"]:
         ds[key] = ds_uv[key]
-        ds[key].attrs["processing_history"] += proc_string
+        if False: # Drop for now
+
+            ds[key].attrs["processing_history"] += proc_string
 
     # Recompute sample averages
-    ds = _calculate_uvcur_avg(ds)
+    ds = calculate_uvcur_avg(ds)
 
-    return ds
+    if return_proc_string:
+        return ds, proc_string
+    else:
+        return ds
 
 
-def rotate_vels_magdec(ds: xr.Dataset) -> xr.Dataset:
+def rotate_vels_magdec(ds: xr.Dataset,
+                       avg_method: str = "mean",) -> xr.Dataset:
     """
     Rotate ocean and ice velocities to account for magnetic declination.
 
@@ -632,7 +654,9 @@ def rotate_vels_magdec(ds: xr.Dataset) -> xr.Dataset:
     -----------
     ds : xr.Dataset
         The input dataset containing ocean and ice velocity components.
-
+    avg_method : str, optional
+        Method to calculate ensemble average ('median' or 'mean'). Default is
+        'mean'.
     Returns:
     --------
     xr.Dataset
@@ -674,8 +698,6 @@ def rotate_vels_magdec(ds: xr.Dataset) -> xr.Dataset:
 
             ds[uvpair[0]].data = uvc_rot.real
             ds[uvpair[1]].data = uvc_rot.imag
-            for key in uvpair:
-                ds[key].attrs["processing_history"] += magdec_str + "\n"
             uvstrs += "\n - (%s, %s)" % uvpair
 
     if hasattr(ds.INSTRUMENT, "declination_correction"):
@@ -702,13 +724,15 @@ def rotate_vels_magdec(ds: xr.Dataset) -> xr.Dataset:
             "Magdec declination correction rotation applied to: %s" % uvstrs
         )
     try:
-        ds = _calculate_uvcur_avg(ds, avg_method="median")
+        ds = calculate_uvcur_avg(ds, avg_method=avg_method)
     except Exception as e:
-        print(f"uvcur_avg failed: {e}")
+        pass
+        #print(f"uvcur_avg failed: {e}")
     try:
-        ds = _calculate_uvice_avg(ds, avg_method="median")
+        ds = _calculate_uvice_avg(ds, avg_method=avg_method)
     except Exception as e:
-        print(f"uvice_avg failed: {e}")
+        pass
+        #print(f"uvice_avg failed: {e}")
 
     return ds
 
@@ -718,7 +742,7 @@ def clear_empty_bins(ds: xr.Dataset, thr_perc: float = 5) -> xr.Dataset:
     Remove bins where less than `thr_perc` percent of the samples contain valid
     (non-NaN) data.
 
-    This function examines each bin along the `BINS` dimension and removes bins
+    This function examines each bin along the `VEL_BIN` dimension and removes bins
     that have a high proportion of missing data (NaNs). The threshold
     percentage (`thr_perc`) defines the minimum percentage of valid samples
     required to retain a bin.
@@ -726,7 +750,7 @@ def clear_empty_bins(ds: xr.Dataset, thr_perc: float = 5) -> xr.Dataset:
     Parameters:
     -----------
     ds : xr.Dataset
-        The input dataset containing the `BINS` dimension and data with
+        The input dataset containing the `VEL_BIN` dimension and data with
         potential NaNs.
     thr_perc : float, optional
         The threshold percentage of valid (non-NaN) data required to keep a
@@ -740,21 +764,21 @@ def clear_empty_bins(ds: xr.Dataset, thr_perc: float = 5) -> xr.Dataset:
     """
 
     # Find indices of empty bins
-    empty_bins = np.where(
+    empty_bin_inds = np.where(
         np.isnan(ds.UCUR).mean("TIME")
         * 100 > (100 - thr_perc))[0]
     # Count
-    Nbins_orig = ds.sizes["BINS"]
-    Nbins_drop = len(empty_bins)
-
+    Nbins_orig = ds.sizes["VEL_BIN"]
+    Nbins_drop = len(empty_bin_inds)
     # Drop from dataset
-    ds = ds.drop_sel(BINS=empty_bins)
+    ds = ds.drop_isel(VEL_BIN=empty_bin_inds)
     # Note in history
-    ds.attrs["history"] += (
-        "\nDropped %i of %i bins where" % (Nbins_drop, Nbins_orig)
-        + " less than %.1f%% of samples were" % (thr_perc)
-        + "  valid. -> Remaining bins: %i" % (ds.sizes["BINS"])
-    )
+    if False:
+        ds.attrs["history"] += (
+            "\nDropped %i of %i bins where" % (Nbins_drop, Nbins_orig)
+            + " less than %.1f%% of samples were" % (thr_perc)
+            + "  valid. -> Remaining bins: %i" % (ds.sizes["VEL_BIN"])
+        )
     return ds
 
 
@@ -849,11 +873,11 @@ def reject_sidelobe(ds: xr.Dataset) -> xr.Dataset:
         beam_angle_deg = 25
 
     # Check that we have a depth
-    if "depth" in ds.keys():
-        DEP = ds.depth.mean(dim="SAMPLE")
+    if "instr_depth" in ds.keys():
+        DEP = ds.instr_depth.mean(dim="SAMPLE")
     else:
         raise Exception(
-            'No "depth" field present. -> cannot reject '
+            'No "instr_depth" field present. -> cannot reject '
             "measurements influenced by sidelobe interference. "
             "Run sig_calc.dep_from_p() first."
         )
@@ -878,7 +902,7 @@ def reject_sidelobe(ds: xr.Dataset) -> xr.Dataset:
     # NaN instances where bin depth is less than
     #   DEP-Rmax
     ds_uv = ds_uv.where(
-        ds.bin_depth > (DEP - Rmax).expand_dims(dim={"BINS": ds.sizes["BINS"]})
+        ds.BIN_DEPTH > (DEP - Rmax).expand_dims(dim={"VEL_BIN": ds.sizes["VEL_BIN"]})
     )
 
     # Feed the NaNed (ucur, vcur) fields back into ds
@@ -894,11 +918,12 @@ def reject_sidelobe(ds: xr.Dataset) -> xr.Dataset:
         f"{(1 - N_after / N_before) * 100:.2f}%% of velocity samples)."
     )
 
-    for key in ["ucur", "vcur"]:
-        ds[key].attrs["processing_history"] += proc_string
+    if False: # Drop for now
+        for key in ["ucur", "vcur"]:
+            ds[key].attrs["processing_history"] += proc_string
 
     # Recompute sample averages
-    ds = _calculate_uvcur_avg(ds)
+    ds = calculate_uvcur_avg(ds)
     return ds
 
 
@@ -915,7 +940,7 @@ def interp_oceanvel(ds: xr.Dataset, target_depth: float) -> xr.Dataset:
     -----------
     ds : xr.Dataset
         The input dataset containing the ocean velocity components (`ucur`,
-        `vcur`) and their associated depths (`bin_depth`) over time.
+        `vcur`) and their associated depths (`BIN_DEPTH`) over time.
     target_depth : float
         The depth (in meters) to which the velocities should be interpolated.
 
@@ -927,15 +952,15 @@ def interp_oceanvel(ds: xr.Dataset, target_depth: float) -> xr.Dataset:
         `VCUR_<depth>m`.
     """
     # Initialize the interpolated velocity arrays
-    U_IP = ds.UCUR.mean("BINS", keep_attrs=True).copy()
-    V_IP = ds.VCUR.mean("BINS", keep_attrs=True).copy()
+    U_IP = ds.UCUR.mean("VEL_BIN", keep_attrs=True).copy()
+    V_IP = ds.VCUR.mean("VEL_BIN", keep_attrs=True).copy()
     U_IP[:] = np.nan
     V_IP[:] = np.nan
 
     # Interpolate UCUR onto the fixed depth
     for nn in range(ds.sizes["TIME"]):
         ip_ = interp1d(
-            ds.bin_depth.isel(TIME=nn),
+            ds.BIN_DEPTH.isel(TIME=nn),
             ds.UCUR.isel(TIME=nn),
             bounds_error=False,
             fill_value=np.nan,
@@ -954,7 +979,7 @@ def interp_oceanvel(ds: xr.Dataset, target_depth: float) -> xr.Dataset:
     # Interpolate VCUR onto the fixed depth
     for nn in range(ds.sizes["TIME"]):
         ip_ = interp1d(
-            ds.bin_depth.isel(TIME=nn),
+            ds.BIN_DEPTH.isel(TIME=nn),
             ds.VCUR.isel(TIME=nn),
             bounds_error=False,
             fill_value=np.nan,
@@ -980,20 +1005,23 @@ def interp_oceanvel(ds: xr.Dataset, target_depth: float) -> xr.Dataset:
         f"{ds.UCUR.attrs['long_name']} "
         f"interpolated to {target_depth:.1f} m depth"
     )
-    ds[U_IP_name].attrs["processing_history"] = (
-        f"{ds.UCUR.attrs['processing_history']} "
-        f"\nInterpolated to {target_depth:.1f} m depth."
-    )
 
     ds[V_IP_name] = V_IP
     ds[V_IP_name].attrs["long_name"] = (
         f"{ds.VCUR.attrs['long_name']} "
         f"interpolated to {target_depth:.1f} m depth"
     )
-    ds[V_IP_name].attrs["processing_history"] = (
-        f"{ds.VCUR.attrs['processing_history']} "
-        f"\nInterpolated to {target_depth:.1f} m depth."
-    )
+
+    if False: # Drop for now
+
+        ds[U_IP_name].attrs["processing_history"] = (
+            f"{ds.UCUR.attrs['processing_history']} "
+            f"\nInterpolated to {target_depth:.1f} m depth."
+        )
+        ds[V_IP_name].attrs["processing_history"] = (
+            f"{ds.VCUR.attrs['processing_history']} "
+            f"\nInterpolated to {target_depth:.1f} m depth."
+        )
 
     print(f"Added interpolated velocities: ({U_IP_name}, {V_IP_name})")
     return ds

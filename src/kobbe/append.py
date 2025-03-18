@@ -17,6 +17,7 @@ from matplotlib.dates import date2num
 import pandas as pd
 from typing import Optional, Union, List, Dict, Any
 from collections.abc import Iterable
+from kval.data.moored_tools._moored_decorator import record_processing
 
 
 def add_to_sigdata(
@@ -478,6 +479,7 @@ def set_lat_lon(ds: xr.Dataset, lat: float, lon: float) -> xr.Dataset:
                         "units": "degrees_east",
                         "axis": 'X',
                         "coverage_content_type": "coordinate"})
+    ds = ds.set_coords(['LATITUDE', 'LONGITUDE'])
 
     return ds
 

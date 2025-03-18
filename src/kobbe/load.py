@@ -23,6 +23,7 @@ import glob2
 import warnings
 from typing import List, Optional, Tuple, Union, Dict, Any
 from kval.util import internals
+from kval.data.moored_tools._moored_decorator import record_processing
 
 if internals.is_notebook():
     from IPython.display import display, clear_output
@@ -35,6 +36,7 @@ def matfiles_to_dataset(
     reshape: bool = True,
     lat: Optional[float] = None,
     lon: Optional[float] = None,
+    orientation: str = 'up',
     include_raw_altimeter: bool = False,
     FOM_ice_threshold: float = 1e4,
     time_threshold_min: Union[bool, float] = None,
@@ -58,6 +60,8 @@ def matfiles_to_dataset(
     lon : Optional[float], optional
         Longitude of deployment. If None, this information is not included.
         Default is None.
+    orientation: str ('up', 'down')
+        Vertical orientation of the acoustic beam. Default is 'up'.
     include_raw_altimeter : bool, optional
         Include raw altimeter signal if available (typically on a single time
         grid). Default is False.
@@ -96,12 +100,14 @@ def matfiles_to_dataset(
     # Convert directory input to a list of .mat files
     if isinstance(file_input, str) and os.path.isdir(file_input):
         file_list = glob2.glob(os.path.join(file_input, "*.mat"))
+    elif isinstance(file_input, str) and file_input.endswith('.mat'):
+        file_list = [file_input]
     elif isinstance(file_input, list):
         file_list = file_input
     else:
         raise ValueError(
-            "file_input must be a list of file paths or a directory"
-            " containing .mat files."
+            "File_input must be a list of .mat file paths, a .mat file, "
+            "or a directory containing .mat files."
         )
 
     if len(file_list) == 0:
@@ -132,7 +138,8 @@ def matfiles_to_dataset(
 
     for filename in file_list:
         ds_single, pressure_offset = _matfile_to_dataset(
-            filename, include_raw_altimeter=include_raw_altimeter
+            filename, include_raw_altimeter=include_raw_altimeter,
+            orientation=orientation
         )
 
         ds_single = ds_single.sel({"time_average": slice(time_min, time_max)})
@@ -247,7 +254,7 @@ def load_nc(nc_file: str) -> xr.Dataset:
 
 ##############################################################################
 
-
+# Filtering
 def chop(
     ds: xr.Dataset,
     indices: Optional[Tuple[int, int]] = None,
@@ -267,7 +274,7 @@ def chop(
     ----------
     ds : xr.Dataset
         The xarray Dataset containing the data to be chopped. The dataset
-        should include the field `Average_AltimeterPressure`.
+        should include the field `Average_Pressure`.
     indices : Optional[Tuple[int, int]]
         Tuple of indices (start, stop) for slicing the dataset along the TIME
         dimension. If not provided, a pressure-based algorithm is used.
@@ -281,7 +288,7 @@ def chop(
         The chopped xarray Dataset.
     """
     if indices is None:
-        p = ds.Average_AltimeterPressure.mean(dim="SAMPLE").data
+        p = ds.Average_Pressure.mean(dim="SAMPLE").data
         p_mean = np.ma.median(p)
         p_sd = np.ma.std(p)
 
@@ -340,7 +347,6 @@ def chop(
                f"(total ensembles {L0} -> {L1})")
     print(net_str)
 
-    ds.attrs["history"] += f"\n- {net_str}"
     return ds
 
 
@@ -360,11 +366,18 @@ def overview(ds: xr.Dataset) -> None:
     None
     """
     # Validate required fields
-    required_fields = ["TIME", "Average_Pressure",
-                       "time_between_ensembles_sec", "sampling_interval_sec"]
+    required_fields = ["TIME", "Average_Pressure",]
     for field in required_fields:
-        if field not in ds and field not in ds.attrs:
-            raise ValueError(f"Dataset is missing required field: {field}")
+        if field not in ds:
+            raise ValueError(f"Dataset is missing required variable: {field}")
+
+    required_INSTR_fields = [
+        "time_between_ensembles_sec", "sampling_interval_sec"]
+    for field in required_INSTR_fields:
+        if field not in ds.INSTRUMENT.attrs:
+            raise ValueError(
+                f"Dataset is missing required INSTRUMENT attribute: {field}")
+
 
     # Time range
     datefmt = "%d %b %Y %H:%M"
@@ -374,20 +387,29 @@ def overview(ds: xr.Dataset) -> None:
 
     print("\nTIME RANGE:")
     print(f"{starttime}  -->  {endtime}  ({ndays:.1f} days)")
-    print(f"Time between ensembles: {ds.time_between_ensembles_sec / 60:.1f}"
+    print(f"Time between ensembles: {
+        ds.INSTRUMENT.time_between_ensembles_sec / 60:.1f}"
           " min.")
-    print(f"Time between samples in ensembles: {ds.sampling_interval_sec:.1f}"
+    print(f"Time between samples in ensembles: {
+        ds.INSTRUMENT.sampling_interval_sec:.1f}"
           " sec.")
 
     # Pressure
-    med_pres = np.ma.median(ds.Average_AltimeterPressure)
-    std_pres = np.ma.std(ds.Average_AltimeterPressure)
+
+    if 'Average_AltimeterPressure' in ds:
+        p_name = 'Average_AltimeterPressure'
+
+    else:
+        p_name = 'Average_Pressure'
+
+    med_pres = np.ma.median(ds[p_name])
+    std_pres = np.ma.std(ds[p_name])
     # (Default to "N/A" if key is missing)
-    pressure_offset = ds.attrs.get("pressure_offset", "N/A")
+    pressure_offset = ds.INSTRUMENT.attrs.get("pressure_offset", "N/A")
 
     print("\nPRESSURE:")
-    print(f"Median (STD) of altimeter pressure: {med_pres:.1f} dbar "
-          f"({std_pres:.1f} dbar) - with fixed atm offset "
+    print(f"Median (STD) of altimeter pressure ({p_name}): {med_pres:.1f} dbar"
+          f" ({std_pres:.1f} dbar) - with fixed atm offset "
           f"{pressure_offset:.3f} dbar.")
 
     # Size
@@ -395,7 +417,7 @@ def overview(ds: xr.Dataset) -> None:
     num_ensembles = ds.sizes["TIME"]
     samples_per_ensemble = ds.sizes["SAMPLE"]
     # (Default to "N/A" if key is missing)
-    num_bins = ds.sizes.get("BINS", "N/A")
+    num_bins = ds.sizes.get("VEL_BIN", "N/A")
 
     print("\nSIZE:")
     print(f"Total {total_time_points} time points.")
@@ -423,7 +445,7 @@ def _reshape_ensembles(
     ds : xr.Dataset
         The xarray Dataset to reshape. It should have the following dimensions:
         - time_average: The dimension to be reshaped.
-        - Optional dimensions: BINS, xyz, beams.
+        - Optional dimensions: VEL_BIN, xyz, beams.
     time_threshold_min : Union[bool, float], optional
         The time jump threshold between ensembles in minutes to determine the
         start and end of ensembles. If not provided, a threshold will be
@@ -515,10 +537,12 @@ def _reshape_ensembles(
         if dims == ("time_average",):
             reshaped_data = np.ma.reshape(data, (Nens, Nsamp_per_ens))
             ds_rsh[var_] = (("TIME", "SAMPLE"), reshaped_data, attrs)
-        elif dims == ("BINS", "time_average"):
+        elif dims == ("VEL_BIN", "time_average"):
             reshaped_data = np.ma.reshape(
-                data, (ds.sizes["BINS"], Nens, Nsamp_per_ens))
-            ds_rsh[var_] = (("BINS", "TIME", "SAMPLE"), reshaped_data, attrs)
+                data, (ds.sizes["VEL_BIN"], Nens, Nsamp_per_ens))
+            ds_rsh[var_] = (("VEL_BIN", "TIME", "SAMPLE"), reshaped_data, attrs
+                            )
+            ds_rsh[var_] = ds_rsh[var_].transpose("TIME", "VEL_BIN", "SAMPLE")
         elif dims == ("time_average", "xyz"):
             reshaped_data = np.ma.reshape(
                 data, (Nens, Nsamp_per_ens, ds.sizes["xyz"]))
@@ -535,6 +559,7 @@ def _reshape_ensembles(
 
 def _matfile_to_dataset(
     filename: str,
+    orientation: str = 'up',
     include_raw_altimeter: bool = False
 ) -> Tuple[xr.Dataset, float]:
     """
@@ -562,7 +587,7 @@ def _matfile_to_dataset(
     # Obtain coordinates
     coords = {
         "time_average": matlab_time_to_python_time(b["Average_Time"]),
-        "BINS": np.arange(b["Average_VelEast"].shape[1]),
+        "VEL_BIN": 1+np.arange(float(b["Average_VelEast"].shape[1])),
         "xyz": np.arange(3),
         "beams": np.arange(
                         len(b["Average_BeamToChannelMapping"])
@@ -620,8 +645,8 @@ def _matfile_to_dataset(
             elif b[key].ndim == 2:
                 if b[key].shape[1] == ds_single.sizes["xyz"]:
                     ds_single[key] = (("time_average", "xyz"), b[key])
-                elif b[key].shape[1] == ds_single.sizes["BINS"]:
-                    ds_single[key] = (("BINS", "time_average"), b[key].T)
+                elif b[key].shape[1] == ds_single.sizes["VEL_BIN"]:
+                    ds_single[key] = (("VEL_BIN", "time_average"), b[key].T)
 
         # AverageRawAltimeter fields
         elif "AverageRawAltimeter_" in key:
@@ -651,7 +676,19 @@ def _matfile_to_dataset(
         ' "average" fields. Source field: *Average_Time*. Converted'
         " using kval.util.time.matlab_time_to_python_time()."
     )
-    ds_single.BINS.attrs["description"] = "Number of velocity bins."
+
+    # Make sure we get "up" or "down"
+    if orientation in ['dn', 'down', 'DOWN', 'DN']:
+        orientation = 'down'
+
+    ds_single.VEL_BIN.attrs = {
+        'long_name': 'Velocity bin number',
+        'units': '1',
+        'positive': orientation,
+        'coverage_content_type': 'coordinate',
+        'comment': 'Increasing away from transducer. First bin is 1.',
+}
+
     ds_single.beams.attrs["description"] = "Beam number (not 5th)."
     ds_single.xyz.attrs["description"] = "Spatial dimension."
 

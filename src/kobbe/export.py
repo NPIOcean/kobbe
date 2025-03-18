@@ -25,7 +25,7 @@ def _add_range_attrs(ds: xr.Dataset) -> xr.Dataset:
 
     if 'UCUR' in ds or 'Uocean' in ds:
         ds.attrs["geospatial_vertical_min"] = 0
-        ds.attrs["geospatial_vertical_max"] = float(ds.DEPTH_BIN.max())
+        ds.attrs["geospatial_vertical_max"] = float(ds.BIN_DEPTH.max())
     else:
         ds.attrs["geospatial_vertical_min"] = 0
         ds.attrs["geospatial_vertical_max"] = 0

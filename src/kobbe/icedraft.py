@@ -211,7 +211,7 @@ def calculate_surface_position(
 
     # Wrap out beta_ to the full 2D shape so we can apply it below
     if beta_key in ds:
-        beta = ds[beta_key].data[:, np.newaxis] * np.ones(ds.depth.shape)
+        beta = ds[beta_key].data[:, np.newaxis] * np.ones(ds.instr_depth.shape)
         note_str += (
             "\n- Applying an open water correction factor beta to "
             f"altimeter distance ({beta_key} field)."
@@ -232,7 +232,7 @@ def calculate_surface_position(
     # Calculate the surface position (depth of the scattering surface detected
     # by LE or AST algorithm below the water surface)
     surface_position = (
-        ds.depth
+        ds.instr_depth
         - ds[alt_dist_attr] * tilt_factor * sound_speed_ratio_obs_nom * beta
         - alpha
     )
@@ -462,7 +462,7 @@ def get_open_water_correction(
     )
 
     # Obtain daily, smoothed instrument depths
-    depth_med = ds.depth.median(dim="SAMPLE")
+    depth_med = ds.instr_depth.median(dim="SAMPLE")
     depth_med_daily, _ = daily_average(
         depth_med, ds.TIME, td=td - 0.5, function="median"
     )

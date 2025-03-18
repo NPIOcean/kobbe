@@ -147,6 +147,8 @@ def histogram(
     textax.spines["left"].set_visible(False)
     textax.spines["bottom"].set_visible(False)
 
+    plt.tight_layout()
+
     if return_figure:
         return fig
 

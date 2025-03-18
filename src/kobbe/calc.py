@@ -11,16 +11,27 @@ import gsw
 import warnings
 import xarray as xr
 from typing import Optional, Tuple, Dict, Any, Union
+from kval.data.moored_tools._moored_decorator import record_processing
+
+
 
 def dep_from_p(
     ds: xr.Dataset,
+    method: str = 'hs',
     corr_atmo: bool = True,
     corr_CTD_density: bool = True
 ) -> xr.Dataset:
     """
     Calculate depth from absolute pressure in a Signature xarray Dataset.
 
-    Computing depth based on the following:
+    Basing on `Average_AltimeterPressure` if available, else
+    `Average_Pressure`.
+
+    Using either of the followign based on `method`
+
+    1. The function gsw.z_from_p, or
+    2. Hydrostatic pressure, where
+
     - Absolute pressure measured by the instrument (from
       `Average_AltimeterPressure` if available, else
       `Average_AltimeterPressure`
@@ -40,22 +51,25 @@ def dep_from_p(
                                            Defaults to True.
 
     Returns:
-        xr.Dataset: The input Dataset with the "depth" field (TIME, SAMPLE)
+        xr.Dataset: The input Dataset with the "instr_depth" field (TIME, SAMPLE)
                     added.
     """
 
+    # Determine the pressure source variable name
+    if 'Average_AltimeterPressure' in ds:
+        p_name = 'Average_AltimeterPressure'
+    else:
+        p_name = 'Average_Pressure'
+
+
+    # Calculate absolute pressure
+    p_abs = ds[p_name] + ds.INSTRUMENT.pressure_offset
+
     note_str = (
         "Altimeter depth calculated from pressure"
-        " (*Average_AltimeterPressure* field) as:\n\n "
+        f" (`{p_name}` field) as:\n\n "
         "   depth = p / (g * rho)\n"
     )
-
-    # CALCULATE ABSOLUTE PRESSURE
-
-    if 'Average_AltimeterPressure' in ds:
-        p_abs = ds.Average_AltimeterPressure + ds.INSTRUMENT.pressure_offset
-    else:
-        p_abs = ds.Average_Pressure + ds.INSTRUMENT.pressure_offset
 
     # CALCULATE OCEAN PRESSURE
     # Raising issues if we cannot find p_atmo (predefined atmospheric pressure)
@@ -85,89 +99,100 @@ def dep_from_p(
 
         else:
             user_input_abort = "C"
-        if 'Average_AltimeterPressure' in ds:
-            p_ocean = ds.Average_AltimeterPressure.data
+
+        # If this is a Sig250/500: Raise a warning
+        if '250' in ds.instrument_model or '500' in ds.instrument_model:
+            print("Continuing without atmospheric correction. "
+                  "Be careful if you are calculating ice draft...")
+            note_str += (
+                "\n- !!! NO TIME_VARYING ATMOSPHERIC CORRECTION APPLIED"
+                "  !!!\n (using default atmospheric pressure offset "
+                f"{ds.INSTRUMENT.pressure_offset:.2f} db)"
+            )
+
+        p_ocean = ds[p_name].data
+
+
+    # GSW method
+    if method == 'gsw':
+        depth = -gsw.z_from_p(ds.Average_Pressure, lat=ds.LATITUDE).data
+        ds['instr_depth'] = (('TIME', 'SAMPLE'), depth,
+                       {'long_name':'transducer depth', 'units':'m',
+                        "note": note_str})
+        return ds
+
+    # Hydrostatic
+    elif method == 'hs':
+        # CALCULATE GRAVITATIONAL ACCELERATION
+        if ds.LATITUDE is None:
+            raise Exception(
+                'No "LATITUDE" field in the dataset. Add one using'
+                " sig_append.set_lat_lon() and try again."
+            )
+
+        g = gsw.grav(ds.LATITUDE.data, 0)
+        ds["g"] = (
+            (), g,
+            {"units": "ms-2",
+            "note": ("Calculated using gsw.grav() for p=0"
+                    f" and lat={ds.LATITUDE:.2f}"),
+            },
+        )
+        note_str += f"\n- Using g={g:.4f} ms-2 (calculated using gsw.grav())"
+
+        # CALCULATE OCEAN WATER DENSITY
+        if hasattr(ds, "rho_CTD") and corr_CTD_density:
+            rho_ocean = ds.rho_CTD.data
+            note_str += "\n- Using ocean density from the *rho_CTD* field."
+            fixed_rho = False
         else:
-            p_ocean = ds.Average_Pressure.data
-
-        print("Continuing without atmospheric correction (careful!)..")
-        note_str += (
-            "\n- !!! NO TIME_VARYING ATMOSPHERIC CORRECTION APPLIED"
-            "  !!!\n (using default atmospheric pressure offset "
-            f"{ds.INSTRUMENT.pressure_offset:.2f} db)"
-        )
-
-    # CALCULATE GRAVITATIONAL ACCELERATION
-    if ds.LATITUDE is None:
-        raise Exception(
-            'No "LATITUDE" field in the dataset. Add one using'
-            " sig_append.set_lat_lon() and try again."
-        )
-
-    g = gsw.grav(ds.LATITUDE.data, 0)
-    ds["g"] = (
-        (), g,
-        {"units": "ms-2",
-         "note": ("Calculated using gsw.grav() for p=0"
-                  f" and lat={ds.LATITUDE:.2f}"),
-         },
-    )
-    note_str += f"\n- Using g={g:.4f} ms-2 (calculated using gsw.grav())"
-
-    # CALCULATE OCEAN WATER DENSITY
-    if hasattr(ds, "rho_CTD") and corr_CTD_density:
-        rho_ocean = ds.rho_CTD.data
-        note_str += "\n- Using ocean density from the *rho_CTD* field."
-        fixed_rho = False
-    else:
-        if corr_CTD_density:
-            print("\nNo density (*rho_ocean*) field found. ")
-            user_input_abort_dense = input(
-                'Enter "A" (Abort) or "C" '
-                "(Continue using fixed rho = 1027 kg m-3): "
-            ).upper()
-
-            while user_input_abort_dense not in ["A", "C"]:
-                print(f'Input ("{user_input_abort_dense}") not recognized.')
+            if corr_CTD_density:
+                print("\nNo density (*rho_ocean*) field found. ")
                 user_input_abort_dense = input(
-                    'Enter "C" (continue with fixed) or "A" (abort): '
+                    'Enter "A" (Abort) or "C" '
+                    "(Continue using fixed rho = 1027 kg m-3): "
                 ).upper()
-            if user_input_abort_dense == "A":
-                raise Exception("ABORTED BY USER (MISSING OCEAN DENSITY)")
 
-        rho_input = input(
-            "Continuing using fixed rho. Choose: \n"
-            "(R): Use rho = 1027 kg m-3, or\n"
-            "(S): Specify fixed rho\n"
-        ).upper()
-        while rho_input not in ["R", "S"]:
-            print('Input ("%s") not recognized.' % rho_input)
+                while user_input_abort_dense not in ["A", "C"]:
+                    print(f'Input ("{user_input_abort_dense}") not recognized.')
+                    user_input_abort_dense = input(
+                        'Enter "C" (continue with fixed) or "A" (abort): '
+                    ).upper()
+                if user_input_abort_dense == "A":
+                    raise Exception("ABORTED BY USER (MISSING OCEAN DENSITY)")
+
             rho_input = input(
-                'Enter "R" (fixed rho = 1027) or "S" (specify): ').upper()
+                "Continuing using fixed rho. Choose: \n"
+                "(R): Use rho = 1027 kg m-3, or\n"
+                "(S): Specify fixed rho\n"
+            ).upper()
+            while rho_input not in ["R", "S"]:
+                print('Input ("%s") not recognized.' % rho_input)
+                rho_input = input(
+                    'Enter "R" (fixed rho = 1027) or "S" (specify): ').upper()
 
-        if rho_input == "R":
-            rho_ocean = 1027
+            if rho_input == "R":
+                rho_ocean = 1027
+            else:
+                rho_ocean = np.float(input("Enter rho (kg m-3): "))
+            fixed_rho = True
+
+            print(f"Continuing with fixed rho = {rho_ocean:.1f} kg m-3")
+            note_str += f"\n- Using FIXED ocean rho = {rho_ocean:.1f} kg m-3."
+
+        # CALCULATE DEPTH
+        # Factor 1e4 is conversion db -> Pa
+        if fixed_rho:
+            depth = 1e4 * p_ocean / g / rho_ocean
         else:
-            rho_ocean = np.float(input("Enter rho (kg m-3): "))
-        fixed_rho = True
+            depth = 1e4 * p_ocean / g / rho_ocean[:, np.newaxis]
 
-        print(f"Continuing with fixed rho = {rho_ocean:.1f} kg m-3")
-        note_str += f"\n- Using FIXED ocean rho = {rho_ocean:.1f} kg m-3."
+        ds["instr_depth"] = (
+            ("TIME", "SAMPLE"), depth,
+            {"units": "m", "long_name": "Transducer depth", "note": note_str},
+        )
 
-    # CALCULATE DEPTH
-    # Factor 1e4 is conversion db -> Pa
-    if fixed_rho:
-        depth = 1e4 * p_ocean / g / rho_ocean
-    else:
-        depth = 1e4 * p_ocean / g / rho_ocean[:, np.newaxis]
-
-    ds["depth"] = (
-        ("TIME", "SAMPLE"),
-        depth,
-        {"units": "m", "long_name": "Transducer depth", "note": note_str},
-    )
-
-    return ds
+        return ds
 
 ##############################################################################
 
@@ -186,7 +211,7 @@ def footprint(signature: Union[xr.Dataset, str],
         Or: a string 'Signature250' or 'Signature500'.
     depth : Union[float, None], optional
         The depth at which to calculate the footprint width. If not provided,
-        the mean depth from the dataset (`ds.depth.mean()`) will be used. The
+        the mean depth from the dataset (`ds.instr_depth.mean()`) will be used. The
         depth value is rounded to one decimal place.
     verbose : bool, optional
         If True, prints the calculated footprint width along with the depth and
@@ -216,7 +241,7 @@ def footprint(signature: Union[xr.Dataset, str],
     Examples
     --------
     >>> ds = xr.Dataset(attrs={"instrument": "Signature500",
-                        "depth": (["time"], [50, 60, 55])})
+                        "instr_depth": (["time"], [50, 60, 55])})
     >>> footprint(ds)
     Beam width at surface: 2.5 m.
     For depth 55.0 m and beam width angle 2.9 degrees (Signature500).
@@ -244,7 +269,7 @@ def footprint(signature: Union[xr.Dataset, str],
             raise ValueError('Beam width angle unknown when `instrument` is '
                              'not either "Signature250" or "Signature500".')
         if not depth:
-            if 'depth' in signature:
+            if 'instr_depth' in signature:
                 depth = np.round(signature.depth.mean().item(), 1)
             else:
                 raise ValueError(
