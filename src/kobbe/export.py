@@ -24,12 +24,13 @@ def _add_range_attrs(ds: xr.Dataset) -> xr.Dataset:
         time.seconds_to_ISO8601(ds.INSTRUMENT.time_between_ensembles_sec))
 
     if 'UCUR' in ds or 'Uocean' in ds:
-        ds.attrs["geospatial_vertical_min"] = 0
-        ds.attrs["geospatial_vertical_max"] = float(ds.BIN_DEPTH.max())
+        ds.attrs["geospatial_vertical_max"] = np.round(
+            float(ds.BIN_DEPTH.max()), 1)
     else:
-        ds.attrs["geospatial_vertical_min"] = 0
         ds.attrs["geospatial_vertical_max"] = 0
-        ds.attrs["geospatial_vertical_units"] = 'm'
+
+    ds.attrs["geospatial_vertical_min"] = 0
+    ds.attrs["geospatial_vertical_units"] = 'm'
 
     ds.attrs["geospatial_vertical_positive"] = "down"
     ds.attrs["geospatial_bounds_vertical_crs"] = "EPSG:5831"
