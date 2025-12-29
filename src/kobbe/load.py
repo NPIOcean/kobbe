@@ -387,12 +387,8 @@ def overview(ds: xr.Dataset) -> None:
 
     print("\nTIME RANGE:")
     print(f"{starttime}  -->  {endtime}  ({ndays:.1f} days)")
-    print(f"Time between ensembles: {
-        ds.INSTRUMENT.time_between_ensembles_sec / 60:.1f}"
-          " min.")
-    print(f"Time between samples in ensembles: {
-        ds.INSTRUMENT.sampling_interval_sec:.1f}"
-          " sec.")
+    print(f"Time between ensembles: {ds.INSTRUMENT.time_between_ensembles_sec / 60:.1f} min.")
+    print(f"Time between samples in ensembles: {ds.INSTRUMENT.sampling_interval_sec:.1f} sec.")
 
     # Pressure
 
