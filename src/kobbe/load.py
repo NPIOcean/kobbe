@@ -470,25 +470,40 @@ def _reshape_ensembles(
     # Convert time threshold from minutes to days
     time_threshold_days = time_threshold_min / (24 * 60)
 
-    # Find indices where there is a time jump > threshold
-    time_jump_inds = np.where(
-        np.diff(time_average_data) > time_threshold_days)[0]
 
-    # Start and end times of each ensemble
-    ens_starts = np.concatenate([np.array([0]), time_jump_inds + 1])
-    ens_ends = np.concatenate([time_jump_inds, np.array([Nt - 1])])
+     # Get sample/ensemble from config information
+    Nsamp_per_ens = ds.attrs.get("samples_per_ensemble")
+    if Nsamp_per_ens is None:
+        raise ValueError("Dataset attribute 'samples_per_ensemble'"
+                         " is missing! Cannot reshape.")
+
+    # Calculate number of ensembles - and any leftover data points
+    Nens = Nt // Nsamp_per_ens
+    leftover = Nt % Nsamp_per_ens
+
+    # Warn if the re are leftover points
+    if leftover > 0:
+        warnings.warn(
+            f"Total number of points ({Nt}) is not a multiple of samples per ensemble "
+            f"({Nsamp_per_ens}). Trimming last {leftover} sample(s)."
+        )
+        Nt_trimmed = Nt - leftover
+    else:
+        Nt_trimmed = Nt
 
     # Calculate mean time of each ensemble
-    t_ens = 0.5 * (time_average_data[ens_starts] + time_average_data[ens_ends])
-    Nsamp_per_ens = ds.samples_per_ensemble
-    Nens = int(Nt / Nsamp_per_ens)
+    time_average_data = ds.time_average.data[:Nt_trimmed]
+    t_ens = time_average_data.reshape(Nens, Nsamp_per_ens).mean(axis=1)
 
-    if Nens != len(t_ens):
-        warnings.warn(
-            f"Expected number of ensembles ({Nens}) differs from the number"
-            f" deduced from time jumps ({len(t_ens)}).\nThis discrepancy"
-            " might cause issues. Please check your time grid."
-        )
+    # Conmsistency check
+    if time_threshold_min is not None:
+        time_threshold_days = time_threshold_min / (24*60)
+        time_jumps = np.where(np.diff(ds.time_average.data) > time_threshold_days)[0]
+        if len(time_jumps) != Nens - 1:
+            warnings.warn(
+                f"Number of ensembles deduced from time jumps ({len(time_jumps)+1}) "
+                f"differs from config-based number ({Nens})."
+            )
 
     print(f"{Nt} time points, {Nens} ensembles. "
           f"Samples per ensemble: {Nsamp_per_ens}")
@@ -527,8 +542,14 @@ def _reshape_ensembles(
     # Reshape variables
     for var_ in ds.variables:
         dims = ds[var_].dims
-        data = ds[var_].data
         attrs = ds[var_].attrs
+
+        # Trim the time dimension if needed
+        if "time_average" in dims:
+            data = ds[var_].data[:Nt_trimmed]
+        else:
+            data = ds[var_].data
+
 
         if dims == ("time_average",):
             reshaped_data = np.ma.reshape(data, (Nens, Nsamp_per_ens))

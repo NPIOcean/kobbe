@@ -187,10 +187,11 @@ def dep_from_p(
         else:
             depth = 1e4 * p_ocean / g / rho_ocean[:, np.newaxis]
 
-        ds["instr_depth"] = (
-            ("TIME", "SAMPLE"), depth,
-            {"units": "m", "long_name": "Transducer depth", "note": note_str},
-        )
+        ds["instr_depth"] = (("TIME", "SAMPLE"), depth,
+                            {"units": "m", 
+                             "long_name": "Transducer depth", 
+                             "note": note_str})
+
 
         return ds
 
