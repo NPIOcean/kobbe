@@ -481,7 +481,8 @@ def _reshape_ensembles(
 
     # Convert time threshold from minutes to days
     time_threshold_days = time_threshold_min / (24 * 60)
-
+    # Find where time jumps are larger than threshold
+    time_jumps = np.where(np.diff(ds.time_average.data) > time_threshold_days)[0]
 
      # Get sample/ensemble from config information
     Nsamp_per_ens = ds.attrs.get("samples_per_ensemble")
@@ -495,16 +496,25 @@ def _reshape_ensembles(
 
     # Warn if the re are leftover points
     if leftover > 0:
-        warnings.warn(
-            f"Total number of points ({Nt}) is not a multiple of samples per ensemble "
-            f"({Nsamp_per_ens}). Trimming last {leftover} sample(s)."
-        )
+        # Define trimmed Nt
         Nt_trimmed = Nt - leftover
-    else:
-        Nt_trimmed = Nt
+
+        # Check if leftover is at the end
+        last_jump_index = time_jumps[-1] if len(time_jumps) > 0 else Nt_trimmed - 1
+        if last_jump_index != Nt_trimmed - 1:
+            raise ValueError(
+                f"Unexpected leftover points not at the end. "
+                f"Cannot safely reshape. Nt={Nt}, Nsamp_per_ens={Nsamp_per_ens}, leftover={leftover}"
+            )
+        else:
+            warnings.warn(
+                f"Total number of points ({Nt}) is not a multiple of samples per ensemble "
+                f"({Nsamp_per_ens}). Trimming last {leftover} sample(s)."
+            )
+            ds = ds.isel(time_average=slice(0, Nt_trimmed))
 
     # Calculate mean time of each ensemble
-    time_average_data = ds.time_average.data[:Nt_trimmed]
+    time_average_data = ds.time_average.data
     t_ens = time_average_data.reshape(Nens, Nsamp_per_ens).mean(axis=1)
 
     # Conmsistency check
@@ -557,30 +567,39 @@ def _reshape_ensembles(
         attrs = ds[var_].attrs
 
         # Trim the time dimension if needed
-        if "time_average" in dims:
-            data = ds[var_].data[:Nt_trimmed]
-        else:
-            data = ds[var_].data
+        try:
+            if "time_average" in dims:
+                data = ds[var_].data[:Nt_trimmed]
+            else:
+                data = ds[var_].data
 
 
-        if dims == ("time_average",):
-            reshaped_data = np.ma.reshape(data, (Nens, Nsamp_per_ens))
-            ds_rsh[var_] = (("TIME", "SAMPLE"), reshaped_data, attrs)
-        elif dims == ("VEL_BIN", "time_average"):
-            reshaped_data = np.ma.reshape(
-                data, (ds.sizes["VEL_BIN"], Nens, Nsamp_per_ens))
-            ds_rsh[var_] = (("VEL_BIN", "TIME", "SAMPLE"), reshaped_data, attrs
-                            )
-            ds_rsh[var_] = ds_rsh[var_].transpose("TIME", "VEL_BIN", "SAMPLE")
-        elif dims == ("time_average", "xyz"):
-            reshaped_data = np.ma.reshape(
-                data, (Nens, Nsamp_per_ens, ds.sizes["xyz"]))
-            ds_rsh[var_] = (("TIME", "SAMPLE", "xyz"), reshaped_data, attrs)
-        elif dims == ("time_average", "beams"):
-            reshaped_data = np.ma.reshape(
-                data, (Nens, Nsamp_per_ens, ds.sizes["beams"]))
-            ds_rsh[var_] = (("TIME", "SAMPLE", "beams"), reshaped_data, attrs)
-
+            if dims == ("time_average",):
+                reshaped_data = np.ma.reshape(data, (Nens, Nsamp_per_ens))
+                ds_rsh[var_] = (("TIME", "SAMPLE"), reshaped_data, attrs)
+            elif dims == ("VEL_BIN", "time_average"):
+                reshaped_data = np.ma.reshape(
+                    data, (ds.sizes["VEL_BIN"], Nens, Nsamp_per_ens))
+                ds_rsh[var_] = (("VEL_BIN", "TIME", "SAMPLE"), reshaped_data, attrs
+                                )
+                ds_rsh[var_] = ds_rsh[var_].transpose("TIME", "VEL_BIN", "SAMPLE")
+            elif dims == ("time_average", "xyz"):
+                reshaped_data = np.ma.reshape(
+                    data, (Nens, Nsamp_per_ens, ds.sizes["xyz"]))
+                ds_rsh[var_] = (("TIME", "SAMPLE", "xyz"), reshaped_data, attrs)
+            elif dims == ("time_average", "beams"):
+                reshaped_data = np.ma.reshape(
+                    data, (Nens, Nsamp_per_ens, ds.sizes["beams"]))
+                ds_rsh[var_] = (("TIME", "SAMPLE", "beams"), reshaped_data, attrs)
+            
+        # Give an explicit error message if the reshape fails.
+        except ValueError as e:
+            raise ValueError(
+                f"Error reshaping variable '{var_}' with dims {dims} in file '{ds.attrs.get('source_file', 'unknown')}'. "
+                f"Data size: {data.size}, expected shape: "
+                f"{' or '.join([str(ds.sizes[d]) if d in ds.sizes else '?' for d in dims])}, "
+                f"Nens: {Nens}, Nsamp_per_ens: {Nsamp_per_ens}.\nOriginal error: {e}"
+        )
     return ds_rsh
 
 ##############################################################################
