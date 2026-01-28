@@ -87,8 +87,9 @@ def test_load_mat_files(mat_files):
     # Calculate depth from pressure with density correction
     ds = kobbe.calc.dep_from_p(ds, corr_CTD_density=True)
 
+
     # Check that "depth" and "g" were added
-    assert 'depth' in ds, "The variable 'depth' was not added to the dataset."
+    assert 'instr_depth' in ds, "The variable 'instr_depth' was not added to the dataset."
     assert 'g' in ds, "The variable 'g' was not added to the dataset."
 
 
@@ -162,62 +163,73 @@ def test_load_mat_files(mat_files):
     ds = kobbe.vel.calculate_ice_vel(ds)
 
     # The operation should generate a bunch of new variables:
-    var_list_ivel = ['uice', 'vice', 'Uice', 'Vice', 'Uice_SD', 'Vice_SD']
+    var_list_ivel = ['uice', 'vice', 'UICE', 'VICE', 'UICE_SD', 'VICE_SD']
 
     # Check that these were all generated
     all_elements_in_keys_ivel = all(var_name in ds.keys()
                                     for var_name in var_list_ivel)
     assert all_elements_in_keys_ivel, ("kobbe.icedraft.calculate_ice_vel did"
-        " not generate all 6 expected variables (uice, Vice, etc).")
-
+        " not generate all 6 expected variables (uice, VICE, etc).")
 
 
     # Calculate ocean velocity
     ds = kobbe.vel.calculate_ocean_vel(ds)
 
     # The operation should generate a bunch of new variables:
-    var_list_ovel = ['bin_depth', 'uocean', 'vocean', 'Uocean', 'Vocean']
+    var_list_ovel = ['BIN_DEPTH', 'ucur', 'vcur', 'UCUR', 'VCUR']
 
     # Check that these were all generated
     all_elements_in_keys_ovel = all(var_name in ds.keys() for var_name in var_list_ovel)
     assert all_elements_in_keys_ovel, ("kobbe.icedraft.calculate_ocean_vel did"
-        " not generate all 5 expected variables (bin_depth, uocean, etc).")
+        " not generate all 5 expected variables (BIN_DEPTH, ucur, VCUR, etc).")
 
 
     ### Ocean velocity editing
 
     # Sidelobe rejection
-    nans_before_sidelobe = int(np.isnan(ds['uocean']).sum())
+    nans_before_sidelobe = int(np.isnan(ds['ucur']).sum())
     ds = kobbe.vel.reject_sidelobe(ds)
-    nans_after_sidelobe = int(np.isnan(ds['uocean']).sum())
+    nans_after_sidelobe = int(np.isnan(ds['ucur']).sum())
 
     # Check that we NaN'ed out a bunch of entries (NaNs should in fact have
     # gone from 0 to > 50% of the dataset..)
     assert nans_after_sidelobe > nans_before_sidelobe, "Sidelobe rejection did not work right"
     # Check metadata note
-    assert ("Rejected samples close enough to the surface to be "
-            "affected by sidelobe interference"
-             in ds.uocean.processing_history)
+
+    # Deprecated: Check processing history ( no longer implementing; 
+    # may implement this in the PROCESSING variable in the future)
+    if False: 
+        assert ("Rejected samples close enough to the surface to be "
+                "affected by sidelobe interference"
+                in ds.ucur.processing_history)
 
 
     # Range masking (threshold for various parameters like corr, amp, speed, tilt,, amp jumps....)
-    nans_before_rangemask = int(np.isnan(ds['uocean']).sum())
+    nans_before_rangemask = int(np.isnan(ds['ucur']).sum())
     ds = kobbe.vel.uvoc_mask_range(ds)
-    nans_after_rangemask = int(np.isnan(ds['uocean']).sum())
+    nans_after_rangemask = int(np.isnan(ds['ucur']).sum())
     # Check that we NaN'ed out a bunch of entries (NaNs should in fact have
     # gone from 0 to > 50% of the dataset..)
     assert nans_after_rangemask > nans_before_rangemask, "Range masking rejection did not work right"
     # Check metadata note
-    assert "THRESHOLD-BASED DATA CLEANING" in ds.uocean.processing_history
+
+
+    # Deprecated: Check processing history ( no longer implementing; 
+    # may implement this in the PROCESSING variable in the future)
+    if False: 
+      assert "THRESHOLD-BASED DATA CLEANING" in ds.ucur.processing_history
 
     # Clearing near-empty velocity bins
-    nbins_before_clearing = ds.sizes['BINS']
+    nbins_before_clearing = ds.sizes['VEL_BIN']
     ds = kobbe.vel.clear_empty_bins(ds)
-    nbins_after_clearing = ds.sizes['BINS']
+    nbins_after_clearing = ds.sizes['VEL_BIN']
     # Check that we reduced number of bins
     assert nbins_after_clearing < nbins_before_clearing, "Bin clearing did not work right"
     # Check metadata note
-    assert "bins where less than" in ds.history
+    # Deprecated: Check processing history ( no longer implementing; 
+    # may implement this in the PROCESSING variable in the future)
+    if False: 
+        assert "bins where less than" in ds.history
 
 
     # Magnetic declination correction
@@ -228,12 +240,12 @@ def test_load_mat_files(mat_files):
     # Boolean entries: Are rotated and original speeds the same
     bool_arr_speed = xr.apply_ufunc(
         np.isclose,
-        ds.uocean**2 + ds.vocean**2,
-        ds_urot.uocean**2 + ds_urot.vocean**2,
+        ds.ucur**2 + ds.vcur**2,
+        ds_urot.ucur**2 + ds_urot.vcur**2,
         kwargs={"atol": 1e-7},  # Allow some numerical error differences
     )
     # (Setting nan velocities to True - only want the comparison between actual speeds)
-    bool_arr_speed = bool_arr_speed.where(~np.isnan(ds.uocean))
+    bool_arr_speed = bool_arr_speed.where(~np.isnan(ds.ucur))
     bool_arr_speed = bool_arr_speed.fillna(value = True)
 
     assert bool_arr_speed.all(), f"Magnetic correction rotation seems to have changed the speed!"
@@ -243,13 +255,13 @@ def test_load_mat_files(mat_files):
     # Boolean entries: Are rotated and original u the same
     bool_arr_u = xr.apply_ufunc(
         np.isclose,
-        ds.uocean,
-        ds_urot.uocean,
+        ds.ucur,
+        ds_urot.ucur,
         kwargs={"atol": 1e-7},  # Allow some numerical error differences
     )
 
     # (Setting nan velocities to True - only want the comparison between actual velocities)
-    bool_arr_u = bool_arr_u.where(~np.isnan(ds.uocean))
+    bool_arr_u = bool_arr_u.where(~np.isnan(ds.ucur))
     bool_arr_u = bool_arr_u.fillna(value = True)
 
     assert not bool_arr_u.all(), f"Magnetic correction rotation seems NOT to have changed the u velocity!"
@@ -257,5 +269,5 @@ def test_load_mat_files(mat_files):
 
     # Interpolate ocean velocity
     ds = kobbe.vel.interp_oceanvel(ds, 10)
-    assert all(var_name in ds.keys() for var_name in ['Vocean_10m', 'Uocean_10m'])
+    assert all(var_name in ds.keys() for var_name in ['VCUR_10m', 'UCUR_10m'])
 

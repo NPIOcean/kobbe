@@ -772,6 +772,7 @@ def clear_empty_bins(ds: xr.Dataset, thr_perc: float = 5) -> xr.Dataset:
     Nbins_drop = len(empty_bin_inds)
     # Drop from dataset
     ds = ds.drop_isel(VEL_BIN=empty_bin_inds)
+    
     # Note in history
     if False:
         ds.attrs["history"] += (
@@ -912,15 +913,13 @@ def reject_sidelobe(ds: xr.Dataset) -> xr.Dataset:
     N_after = np.sum(~np.isnan(ds.ucur))  # Count samples
 
     # + Add processing history
-    proc_string = (
-        f"\nRejected samples close enough to the surface "
-        f"to be affected by sidelobe interference (rejecting "
-        f"{(1 - N_after / N_before) * 100:.2f}%% of velocity samples)."
-    )
-
-    if False: # Drop for now
-        for key in ["ucur", "vcur"]:
-            ds[key].attrs["processing_history"] += proc_string
+    # Drop for now:
+    if False:
+        proc_string = (
+            f"\nRejected velocity samples close enough to the surface "
+            f"to be affected by sidelobe interference (rejecting "
+            f"{(1 - N_after / N_before) * 100:.2f}%% of velocity samples)."
+        )
 
     # Recompute sample averages
     ds = calculate_uvcur_avg(ds)
@@ -1011,17 +1010,6 @@ def interp_oceanvel(ds: xr.Dataset, target_depth: float) -> xr.Dataset:
         f"{ds.VCUR.attrs['long_name']} "
         f"interpolated to {target_depth:.1f} m depth"
     )
-
-    if False: # Drop for now
-
-        ds[U_IP_name].attrs["processing_history"] = (
-            f"{ds.UCUR.attrs['processing_history']} "
-            f"\nInterpolated to {target_depth:.1f} m depth."
-        )
-        ds[V_IP_name].attrs["processing_history"] = (
-            f"{ds.VCUR.attrs['processing_history']} "
-            f"\nInterpolated to {target_depth:.1f} m depth."
-        )
 
     print(f"Added interpolated velocities: ({U_IP_name}, {V_IP_name})")
     return ds

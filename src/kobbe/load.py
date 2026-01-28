@@ -254,7 +254,6 @@ def load_nc(nc_file: str) -> xr.Dataset:
 
 ##############################################################################
 
-# Filtering
 def chop(
     ds: xr.Dataset,
     indices: Optional[Tuple[int, int]] = None,
@@ -346,6 +345,11 @@ def chop(
     net_str = (f"Chopped {L0 - L1} ensembles using -> {indices} "
                f"(total ensembles {L0} -> {L1})")
     print(net_str)
+
+    if 'history' in ds.attrs:
+        ds.attrs['history'] += "\n" + net_str
+    else:
+        ds.attrs['history'] = net_str
 
     return ds
 
