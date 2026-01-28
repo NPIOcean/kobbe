@@ -291,12 +291,20 @@ def chop(
         p_mean = np.ma.median(p)
         p_sd = np.ma.std(p)
 
+        threshold = p_mean - 3 * p_sd
+        mask = p < threshold
+
         indices = [None, None]
 
-        if p[0] < p_mean - 3 * p_sd:
-            indices[0] = np.where(np.diff(p < p_mean - 3 * p_sd))[0][0] + 1
-        if p[-1] < p_mean - 3 * p_sd:
-            indices[1] = np.where(np.diff(p < p_mean - 3 * p_sd))[0][-1]
+        # chop from the beginning
+        if mask[0]:
+            indices[0] = np.argmax(~mask)
+
+        # chop from the end
+        if mask[-1]:
+            indices[1] = len(mask) - np.argmax(~mask[::-1]) - 1
+
+
 
         keep_slice = slice(*indices)
         if auto_accept:
