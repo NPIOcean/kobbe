@@ -15,7 +15,7 @@ from scipy.io import loadmat
 import xarray as xr
 from matplotlib.dates import num2date, date2num
 import matplotlib.pyplot as plt
-from kval.util.time import matlab_time_to_python_time
+from kval.util.time import matlab_datenum_to_mpl_datenum
 from kobbe.append import _add_tilt, _add_SIC_FOM, set_lat_lon
 from datetime import datetime
 import os
@@ -23,7 +23,6 @@ import glob2
 import warnings
 from typing import List, Optional, Tuple, Union, Dict, Any
 from kval.util import internals
-from kval.data.moored_tools._moored_decorator import record_processing
 
 if internals.is_notebook():
     from IPython.display import display, clear_output
@@ -152,7 +151,10 @@ def matfiles_to_dataset(
         else:
             print(f'CONCATENATING: FILE "{filename[-15:]}"\r', end="")
             try:
-                ds = xr.concat([ds, ds_single], dim="time_average")
+                ds = xr.concat(
+                    [ds, ds_single], 
+                    dim="time_average", data_vars='all',
+                    join="outer")
             except Exception as e:
                 print(f"Failed at {filename[-10:]} with error: {e}")
 
@@ -493,6 +495,8 @@ def _reshape_ensembles(
     # Calculate number of ensembles - and any leftover data points
     Nens = Nt // Nsamp_per_ens
     leftover = Nt % Nsamp_per_ens
+    Nt_trimmed = Nt  # default: no trimming needed
+
 
     # Warn if the re are leftover points
     if leftover > 0:
@@ -634,7 +638,7 @@ def _matfile_to_dataset(
 
     # Obtain coordinates
     coords = {
-        "time_average": matlab_time_to_python_time(b["Average_Time"]),
+        "time_average": matlab_datenum_to_mpl_datenum(b["Average_Time"]),
         "VEL_BIN": 1+np.arange(float(b["Average_VelEast"].shape[1])),
         "xyz": np.arange(3),
         "beams": np.arange(
@@ -647,7 +651,7 @@ def _matfile_to_dataset(
                 {"along_altimeter": np.arange(
                         b["AverageRawAltimeter_AmpBeam5"].shape[1]
                     ),
-                    "raw_altimeter_time": matlab_time_to_python_time(
+                    "raw_altimeter_time": matlab_datenum_to_mpl_datenum(
                         b["AverageRawAltimeter_Time"]),
                  }
             )
@@ -662,7 +666,7 @@ def _matfile_to_dataset(
     try:
         ds_single["time_average_ice"] = (
             ("time_average"),
-            matlab_time_to_python_time(b["AverageIce_Time"]),
+            matlab_datenum_to_mpl_datenum(b["AverageIce_Time"])
         )
     except KeyError:
         print("Did not find AverageIce data")
@@ -722,7 +726,7 @@ def _matfile_to_dataset(
     ds_single.time_average.attrs["description"] = (
         "Time stamp for"
         ' "average" fields. Source field: *Average_Time*. Converted'
-        " using kval.util.time.matlab_time_to_python_time()."
+        " using kval.util.time.matlab_datenum_to_mpl_datenum()."
     )
 
     # Make sure we get "up" or "down"
@@ -745,7 +749,7 @@ def _matfile_to_dataset(
             "Time stamp for"
             ' "AverageRawAltimeter" fields. Source field:'
             " *AverageRawAltimeter_Time*. Converted"
-            " using matlab_time_to_python_time."
+            " using matlab_datenum_to_mpl_datenum."
         )
         ds_single.along_altimeter.attrs["description"] = (
                     "Index along altimeter.")
@@ -789,10 +793,11 @@ def _sig_mat_to_dict(
     matfn: str,
     include_metadata: bool = True,
     squeeze_identical: bool = True,
-    skip_Burst: bool = True,
-    skip_IBurst: bool = True,
+    skip_Burst: bool = False,
+    skip_IBurst: bool = False,
     skip_Average: bool = False,
     skip_AverageRawAltimeter: bool = False,
+    skip_AltAverage: bool = True,          
     skip_AverageIce: bool = False,
     skip_fields: Optional[List[str]] = []
         ) -> Dict[str, Any]:
@@ -860,6 +865,7 @@ def _sig_mat_to_dict(
         "Average_",
         "AverageRawAltimeter_",
         "AverageIce_",
+        "Alt_Average_",                     
     ]
     startstrings_skip_bool = [
         skip_Burst,
@@ -867,6 +873,7 @@ def _sig_mat_to_dict(
         skip_Average,
         skip_AverageRawAltimeter,
         skip_AverageIce,
+        skip_AltAverage,                   
     ]
     startstrings_skip = tuple(
         [str_ for (str_, bool_) in

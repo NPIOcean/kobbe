@@ -10,15 +10,13 @@ import numpy as np
 import xarray as xr
 from scipy.interpolate import interp1d
 import gsw
-from kval.util.time import matlab_time_to_python_time
+from kval.util.time import matlab_datenum_to_mpl_datenum
 from kval.util.magdec import get_declination
 from kval.util.era5 import get_era5_time_series_point
 from matplotlib.dates import date2num
 import pandas as pd
 from typing import Optional, Union, List, Dict, Any
 from collections.abc import Iterable
-from kval.data.moored_tools._moored_decorator import record_processing
-
 
 def add_to_sigdata(
     ds: xr.Dataset,
@@ -70,7 +68,7 @@ def add_to_sigdata(
     """
 
     if time_mat:
-        time = matlab_time_to_python_time(time)
+        time = matlab_datenum_to_mpl_datenum(time)
 
 
     # Convert time/data to NumPy arrays if they are not already one

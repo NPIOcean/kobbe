@@ -1,6 +1,6 @@
 import numpy as np
 import xarray as xr
-from kval.metadata import conventionalize, check_conventions
+from kval.metadata import conventionalize, compliance
 from kval.util import time
 from kobbe.metadata_dicts import _variables
 from typing import List, Optional
@@ -159,7 +159,7 @@ def _add_gmdc_keywords(ds: xr.Dataset) -> xr.Dataset:
     return conventionalize.add_gmdc_keywords_moor(ds)
 
 
-def check_cf(ds: xr.Dataset, close_button: bool = True) -> None:
+def check_cf(ds: xr.Dataset) -> None:
     """
     Check the dataset's compliance with CF and ACDD formatting using the IOOS
     compliance checker.
@@ -170,10 +170,7 @@ def check_cf(ds: xr.Dataset, close_button: bool = True) -> None:
         close_button (bool):
             Whether to include a close button in the compliance checker output. Default is True.
     """
-    if close_button:
-        check_conventions.check_file_with_button(ds)
-    else:
-        check_conventions.check_file(ds)
+    compliance.compliance_checks_ioos(ds)
 
 
 def to_nc(

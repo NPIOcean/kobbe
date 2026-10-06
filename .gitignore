@@ -11,6 +11,9 @@ graphics/
 *.pyc
 
 
+.vscode/
+*.deb
+
 #### Defaults:
 
 # Byte-compiled / optimized / DLL files

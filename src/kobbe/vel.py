@@ -595,8 +595,8 @@ def uvoc_mask_range(
     # Create a boolean (*True* above bumps)
     zeros_firstbin = xr.zeros_like(ds.ucur.isel(VEL_BIN=0))
     NOT_ABOVE_BUMP = (
-        xr.concat([zeros_firstbin, is_bump.cumsum(axis=0) > 0],
-                dim=("VEL_BIN")) < 1
+        xr.concat([zeros_firstbin, is_bump.cumsum(dim="VEL_BIN") > 0],
+            dim="VEL_BIN", join="exact") < 1
     )
     ds_uv = ds_uv.where(NOT_ABOVE_BUMP)
     N_amp_bump = float(np.sum(~np.isnan(ds_uv.ucur)).data)

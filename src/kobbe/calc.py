@@ -11,8 +11,6 @@ import gsw
 import warnings
 import xarray as xr
 from typing import Optional, Tuple, Dict, Any, Union
-from kval.data.moored_tools._moored_decorator import record_processing
-
 
 
 def dep_from_p(
