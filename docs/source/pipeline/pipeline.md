@@ -93,7 +93,6 @@ External data (sea level pressure, CTD measurements, magnetic declination) are r
 
   - `append_ctd()` - CTD data if available
   - `append_atm_pres()` - Append atmospheric pressure from a preexisting dataset
-      - `append_atm_pres_auto()` - Append atmospheric pressure by automatically downloading hourly ERA-5 sea level pressure from the nearest grid point and appending it to the dataset
   - `append_magdec()` - Magnetic declination data
       - `append_magdec_auto()` - Automatically obtain magnetic declination from the World Magnetic Model (using the [`geomag`](https://pypi.org/project/pygeomag/) module) and append to the dataset.
   - `append_to_sigdata()` - Other contextual data (remote sensing SIC/SIT, for example)
