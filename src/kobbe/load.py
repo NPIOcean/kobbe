@@ -492,30 +492,35 @@ def _reshape_ensembles(
         raise ValueError("Dataset attribute 'samples_per_ensemble'"
                          " is missing! Cannot reshape.")
 
-    # Calculate number of ensembles - and any leftover data points
-    Nens = Nt // Nsamp_per_ens
-    leftover = Nt % Nsamp_per_ens
-    Nt_trimmed = Nt  # default: no trimming needed
+    # Identify ensembles from the time gaps, and drop any that do not have
+    # the expected number of samples (e.g. a partial ensemble at the start or
+    # end of the deployment, or at a file boundary).
+    starts = np.r_[0, time_jumps + 1]
+    lengths = np.diff(np.r_[starts, Nt])
+    incomplete = np.where(lengths != Nsamp_per_ens)[0]
 
-
-    # Warn if the re are leftover points
-    if leftover > 0:
-        # Define trimmed Nt
-        Nt_trimmed = Nt - leftover
-
-        # Check if leftover is at the end
-        last_jump_index = time_jumps[-1] if len(time_jumps) > 0 else Nt_trimmed - 1
-        if last_jump_index != Nt_trimmed - 1:
+    if len(incomplete) > 0:
+        keep = np.ones(Nt, dtype=bool)
+        for i in incomplete:
+            keep[starts[i]:starts[i] + lengths[i]] = False
+        frac_dropped = 1 - keep.sum() / Nt
+        details = "; ".join(
+            f"#{i}: {lengths[i]} samples, starting "
+            f"{num2date(time_average_data[starts[i]]).strftime('%Y-%m-%d %H:%M')}"
+            for i in incomplete)
+        if frac_dropped > 0.01:
             raise ValueError(
-                f"Unexpected leftover points not at the end. "
-                f"Cannot safely reshape. Nt={Nt}, Nsamp_per_ens={Nsamp_per_ens}, leftover={leftover}"
-            )
-        else:
-            warnings.warn(
-                f"Total number of points ({Nt}) is not a multiple of samples per ensemble "
-                f"({Nsamp_per_ens}). Trimming last {leftover} sample(s)."
-            )
-            ds = ds.isel(time_average=slice(0, Nt_trimmed))
+                f"{len(incomplete)} ensemble(s) do not have the expected "
+                f"{Nsamp_per_ens} samples ({frac_dropped:.1%} of data). This "
+                f"suggests a wrong time_threshold_min ({time_threshold_min:.2f} "
+                f"min) or a configuration change. Details: {details}")
+        warnings.warn(
+            f"Dropping {len(incomplete)} incomplete ensemble(s) "
+            f"(expected {Nsamp_per_ens} samples): {details}")
+        ds = ds.isel(time_average=keep)
+
+    Nt_trimmed = len(ds.time_average)
+    Nens = Nt_trimmed // Nsamp_per_ens
 
     # Calculate mean time of each ensemble
     time_average_data = ds.time_average.data
@@ -531,7 +536,7 @@ def _reshape_ensembles(
                 f"differs from config-based number ({Nens})."
             )
 
-    print(f"{Nt} time points, {Nens} ensembles. "
+    print(f"{Nt} time points, {Nt_trimmed} ensembles. "
           f"Samples per ensemble: {Nsamp_per_ens}")
 
     # Prepare new coordinates
